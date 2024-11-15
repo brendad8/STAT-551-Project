@@ -1,0 +1,78 @@
+---
+title: "Exploratory Data Analysis"
+author: "Rachel Roggenkemper, Jacob Perez, Brendan Callender"
+format: html
+editor: visual
+code-fold: true
+---
+
+```{r}
+#| label: load-packages
+
+library(tidyverse)
+```
+
+```{r}
+#| label: read-data
+#| message: false
+
+cvd <- read_csv(here::here("data", "cvd_data.csv"))
+diab <- read_csv(here::here("data", "diabetes_full.csv"))
+es_diab <- read_csv(here::here("data", "early_stage_diabetes.csv"))
+```
+
+```{r}
+#| label: clean-response-vars
+
+cvd <- cvd %>%
+  mutate(target = if_else(target == 0, "no heart disease", "heart disease"),
+         target = factor(target, levels = c("heart disease", "no heart disease")))
+
+diab <- diab %>%
+  mutate(target = case_when(
+    Diabetes_012 == 0 ~ "no diabetes",
+    Diabetes_012 == 1 ~ "prediabetes",
+    Diabetes_012 == 2 ~ "diabetes"
+  )) %>%
+  select(-Diabetes_012)
+
+es_diab <- es_diab %>%
+  mutate(target = if_else(class == "Negative", "no diabetes", "diabetes"),
+         target = factor(target, levels = c("no diabetes", "diabetes"))) %>%
+  select(-class)
+```
+
+# Response Variables
+
+## Cardiovascular Disease Dataset
+
+```{r}
+N <- nrow(cvd)
+cvd %>%
+  select(target) %>%
+  group_by(target) %>%
+  summarize(n = n()) %>%
+  mutate(prop = n / N)
+```
+
+## Early Stage Diabetes
+
+```{r}
+N <- nrow(es_diab)
+es_diab %>%
+  select(target) %>%
+  group_by(target) %>%
+  summarize(n = n()) %>%
+  mutate(prop = n / N)
+```
+
+## Diabetes
+
+```{r}
+N <- nrow(diab)
+diab %>%
+  select(target) %>%
+  group_by(target) %>%
+  summarize(n = n()) %>%
+  mutate(prop = n / N)
+```
