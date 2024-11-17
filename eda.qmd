@@ -6,6 +6,8 @@ editor: visual
 code-fold: true
 ---
 
+# Setup & Data Cleaning
+
 ```{r}
 #| label: load-packages
 
@@ -29,20 +31,23 @@ cvd <- cvd %>%
          target = factor(target, levels = c("heart disease", "no heart disease")))
 
 diab <- diab %>%
-  mutate(target = case_when(
-    Diabetes_012 == 0 ~ "no diabetes",
-    Diabetes_012 == 1 ~ "prediabetes",
-    Diabetes_012 == 2 ~ "diabetes"
-  )) %>%
+  mutate(
+    target = case_when(
+      Diabetes_012 == 0 ~ "no diabetes",
+      Diabetes_012 == 1 ~ "diabetes", # prediabetes
+      Diabetes_012 == 2 ~ "diabetes"
+  ),
+    target = factor(target, levels = c("diabetes", "no diabetes"))
+  ) %>%
   select(-Diabetes_012)
 
 es_diab <- es_diab %>%
   mutate(target = if_else(class == "Negative", "no diabetes", "diabetes"),
-         target = factor(target, levels = c("no diabetes", "diabetes"))) %>%
+         target = factor(target, levels = c("diabetes", "no diabetes"))) %>%
   select(-class)
 ```
 
-# Response Variables
+# Distribution of Response Variables
 
 ## Cardiovascular Disease Dataset
 
@@ -66,7 +71,7 @@ es_diab %>%
   mutate(prop = n / N)
 ```
 
-## Diabetes
+## Diabetes CDC
 
 ```{r}
 N <- nrow(diab)
@@ -75,4 +80,24 @@ diab %>%
   group_by(target) %>%
   summarize(n = n()) %>%
   mutate(prop = n / N)
+```
+
+# Exploratory Data Analysis
+
+Cool idea: Attempt to make two models for men and women separately and compare to 1 single model. Men and women have different indicators for certain diseases so doing this could help account for that.
+
+## Cardiovascular Disease
+
+```{r}
+cvd %>%
+  ggplot(aes(x = age, fill = target)) +
+  geom_histogram(bins = 10) +
+  facet_wrap(~target) +
+  theme(legend.position = "none")
+```
+
+```{r}
+cvd %>%
+  ggplot(aes(x = maxheartrate, y = restingBP, color = target)) +
+  geom_point()
 ```
