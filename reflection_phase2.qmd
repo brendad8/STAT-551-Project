@@ -5,23 +5,18 @@ format: html
 editor: visual
 ---
 
-## Quarto
+# **Goals**
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+### What is the main takeaway message you hope to be able to supply to the partner?
 
-## Running Code
+### What types of summaries or visualizations do you think would be impactful to communicate your results?
 
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+### What are some conclusions that you would be excited to discover? What results might be a bit disappointing to you?
 
-```{r}
-1 + 1
-```
+# **Challenges**
 
-You can add options to executable code like this
+### Are there any aspects of the data that you are worried about, or that are challenging to clean / manipulate?
 
-```{r}
-#| echo: false
-2 * 2
-```
+### Is there any information that is not in your dataset that you wish you could have?
 
-The `echo: false` option disables the printing of code (only output is displayed).
+### Are there any other concerns you have regarding the success of your project?
