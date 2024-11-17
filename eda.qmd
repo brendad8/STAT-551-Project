@@ -88,16 +88,47 @@ Cool idea: Attempt to make two models for men and women separately and compare t
 
 ## Cardiovascular Disease
 
+From the plot we see very high values of Serum cholesterol are associated with having heart disease. Also restingelectro = 2 is associated with heart disease compared to other values of resting electro. This trend appears to be the same for both men and women.
+
 ```{r}
 cvd %>%
-  ggplot(aes(x = age, fill = target)) +
-  geom_histogram(bins = 10) +
-  facet_wrap(~target) +
-  theme(legend.position = "none")
+  ggplot(aes(x = restingrelectro, y = serumcholestrol, color = target)) +
+  geom_jitter() +
+  labs(title = "Resting Electro and Serum Cholesterol vs CVD") +
+  theme(plot.title.position = "plot") +
+  facet_wrap(~gender)
 ```
+
+From the plot below, we see that larger values of both slope and Number of major vessels are associated with having heart disease. This trend appears to be the same for both men and women.
+
+```{r}
+cvd %>%
+  ggplot(aes(x = noofmajorvessels, y = slope, color = target)) +
+  geom_jitter() +
+  labs(title = "Slope and Number of Major Vessels vs CVD") +
+  theme(plot.title.position = "plot") + 
+  facet_wrap(~gender)
+```
+
+From the plot below, Chestpain values of 1,2,3 are more associated with heart disease while chest pain = 0 is more associated with no heart disease. This trend is the same for both men and women.
+
+```{r}
+cvd %>%
+  ggplot(aes(x = chestpain, fill = target)) +
+  geom_histogram(bins = 10, position = "dodge") +
+  # theme(legend.position = "none") +
+  facet_wrap(~gender) +
+  labs(title = "Chest Pain vs CVD by Gender") +
+  theme(plot.title.position = "plot")
+```
+
+The plot below shows that larger values of Resting BP are associated with higher rates of having heart disease. Max heart rate appears to not have a clear pattern with respect to predicting heart disease. This trend appears to be slightly different for men and women.
 
 ```{r}
 cvd %>%
   ggplot(aes(x = maxheartrate, y = restingBP, color = target)) +
-  geom_point()
+  geom_point()  +
+  labs(title = "Resting BP and Max Heart Rate vs CVD") +
+  theme(plot.title.position = "plot") +
+  facet_wrap(~gender)
 ```
