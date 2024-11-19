@@ -48,11 +48,30 @@ es_diab <- es_diab %>%
 ```
 
 ```{r}
-#| label: check-nas
+#| label: check-nas-cvd
 cvd %>% 
   is.na() %>%
   as.data.frame() %>%
-  summarize(sum)
+  lapply(FUN = sum) %>%
+  as.data.frame()
+```
+
+```{r}
+#| label: check-nas-diab
+diab %>% 
+  is.na() %>%
+  as.data.frame() %>%
+  lapply(FUN = sum) %>%
+  as.data.frame()
+```
+
+```{r}
+#| label: check-nas-diab_es
+es_diab %>% 
+  is.na() %>%
+  as.data.frame() %>%
+  lapply(FUN = sum) %>%
+  as.data.frame()
 ```
 
 # Distribution of Response Variables
