@@ -1,0 +1,22 @@
+---
+title: "Reflection (Phase 2)"
+author: "Brendan Callendar, Jacob Perez, Rachel Roggenkemper"
+format: html
+editor: visual
+---
+
+# **Goals**
+
+### What is the main takeaway message you hope to be able to supply to the partner?
+
+### What types of summaries or visualizations do you think would be impactful to communicate your results?
+
+### What are some conclusions that you would be excited to discover? What results might be a bit disappointing to you?
+
+# **Challenges**
+
+### Are there any aspects of the data that you are worried about, or that are challenging to clean / manipulate?
+
+### Is there any information that is not in your dataset that you wish you could have?
+
+### Are there any other concerns you have regarding the success of your project?

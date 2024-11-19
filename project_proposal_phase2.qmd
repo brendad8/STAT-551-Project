@@ -1,0 +1,16 @@
+---
+title: "Project Proposal (Phase 2)"
+author: "Brendan Callendar, Jacob Perez, Rachel Roggenkemper"
+format: html
+editor: visual
+---
+
+# Introduction 
+
+# Previous Work 
+
+# Exploratory Analysis 
+
+# Preliminary Results 
+
+# Project Timeline and Goals 
