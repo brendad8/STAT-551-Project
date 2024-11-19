@@ -19,7 +19,7 @@ library(tidyverse)
 #| message: false
 
 cvd <- read_csv(here::here("data", "cvd_data.csv"))
-diab <- read_csv(here::here("data", "diabetes_full.csv"))
+diab <- read_csv(here::here("data", "diabetes_full.csv")) # brendan doing this one
 es_diab <- read_csv(here::here("data", "early_stage_diabetes.csv"))
 ```
 

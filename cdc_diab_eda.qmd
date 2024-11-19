@@ -1,0 +1,121 @@
+---
+title: "CDC Diabetes Dataset EDA"
+author: "Brendan Callender"
+format: html
+editor: visual
+---
+
+## Setup
+
+### Load Packages
+
+```{r}
+#| label: load-packages
+
+library(tidyverse)
+library(tidymodels)
+```
+
+```{r}
+#| label: read-in-data
+
+diab <- read_csv(here::here("data", "diabetes_full.csv")) # brendan doing this one
+
+```
+
+### Data Cleaning
+
+```{r}
+diab <- diab %>%
+  mutate(
+    target = case_when(
+      Diabetes_012 == 0 ~ "no diabetes",
+      Diabetes_012 == 1 ~ "diabetes", # prediabetes
+      Diabetes_012 == 2 ~ "diabetes"
+  ),
+    target = factor(target, levels = c("diabetes", "no diabetes"))
+  ) %>%
+  select(-Diabetes_012)
+```
+
+```{r}
+diab <- diab %>%
+  mutate(
+    HighBP = if_else(HighBP == 0, "No", "Yes"),
+    HighChol = if_else(HighChol == 0, "No", "Yes"),
+    CholCheck = if_else(CholCheck == 0, "No", "Yes"),
+    Smoke_100_cigs = if_else(Smoker == 0, "No", "Yes"),
+    Stroke = if_else(Stroke == 0, "No", "Yes"),
+    HeartDiseaseorAttack = if_else(HeartDiseaseorAttack == 0, "No", "Yes"),
+    Phys_Act_in_p_30_days = if_else(PhysActivity == 0, "No", "Yes"),
+    Fruit_daily = if_else(Fruits == 0, "No", "Yes"),
+    Veg_daily = if_else(Veggies == 0, "No", "Yes"),
+    # men having > 14 drinks per week and adult women having > 7 drinks per week
+    HvyAlcoholConsump = if_else(HvyAlcoholConsump == 0, "No", "Yes"),
+    AnyHealthcare = if_else(AnyHealthcare == 0, "No", "Yes"),
+    NoDocbcCost = if_else(NoDocbcCost == 0, "No", "Yes"),
+    Health_Rating = case_when(GenHlth == 1 ~ "Excellent",
+                              GenHlth == 2 ~ "Very Good",
+                              GenHlth == 3 ~ "Good",
+                              GenHlth == 4 ~ "Fair",
+                              GenHlth == 5 ~ "Poor"),
+    DiffWalk = if_else(DiffWalk == 0, "No", "Yes"),
+    Sex = if_else(Sex == 0, "Female", "Male"),
+    Age = case_when(Age == 1 ~ "18-24",
+                    Age == 2 ~ "25-29",
+                    Age == 3 ~ "30-34",
+                    Age == 4 ~ "35-39",
+                    Age == 5 ~ "40-44",
+                    Age == 6 ~ "45-49",
+                    Age == 7 ~ "50-54",
+                    Age == 8 ~ "55-59",
+                    Age == 9 ~ "60-64",
+                    Age == 10 ~ "65-69",
+                    Age == 11 ~ "70-74",
+                    Age == 12 ~ "75-79",
+                    Age == 13 ~ "80+"
+                  ),
+    Education = case_when(Education == 1 ~ "None",
+                          Education == 2 ~ "Elementary",
+                          Education == 3 ~ "Some High School",
+                          Education == 4 ~ "High School Grad",
+                          Education == 5 ~ "Some College",
+                          Education == 6 ~ "College Grad"
+                          )) %>%
+  select(-Smoker, -PhysActivity, -Fruits, -Veggies, -GenHlth)
+```
+
+## Exploratory Data Analysis
+
+```{r}
+#| label: distribution-of-target
+
+N <- nrow(diab)
+diab %>% 
+  select(target) %>%
+  group_by(target) %>%
+  summarize(n = n() / N)
+```
+
+```{r}
+#| label: distribution-of-sex
+
+diab %>% 
+  select(Sex) %>%
+  group_by(Sex) %>%
+  summarize(n = n() / N)
+```
+
+```{r}
+#| label: distribution-of-target-and-sex
+#| message: false
+
+diab %>% 
+  select(Sex, target) %>%
+  group_by(Sex, target) %>%
+  summarize(n = n() / N)
+```
+
+```{r}
+diab %>%
+```
