@@ -47,6 +47,14 @@ es_diab <- es_diab %>%
   select(-class)
 ```
 
+```{r}
+#| label: check-nas
+cvd %>% 
+  is.na() %>%
+  as.data.frame() %>%
+  summarize(sum)
+```
+
 # Distribution of Response Variables
 
 ## Cardiovascular Disease Dataset
