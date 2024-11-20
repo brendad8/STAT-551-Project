@@ -118,4 +118,26 @@ diab %>%
 
 ```{r}
 diab %>%
+  ggplot() +
+  geom_bar(aes(x = HighBP, fill = target), position = "fill") +
+  facet_wrap(~Sex)
+```
+
+```{r}
+diab %>%
+  ggplot() +
+  geom_density(aes(x = BMI, color = target))
+```
+
+```{r}
+diab %>%
+  ggplot() +
+  geom_jitter(aes(x = PhysHlth, y = MentHlth, color = target)) +
+  facet_wrap(~target)
+```
+
+```{r}
+diab %>%
+  ggplot() +
+  geom_bar(aes(x = Stroke, fill = target), position = "fill")
 ```
