@@ -1,0 +1,553 @@
+---
+title: "Early Stage Diabetes (EDA + Preliminary Results)"
+author: "Rachel Roggenkemper"
+format: html
+editor: visual
+---
+
+# Set-up & Data Cleaning
+
+```{r}
+#| label: load-packages
+#| message: false
+
+library(tidyverse)
+library(tidymodels)
+library(rpart)
+library(rpart.plot)
+```
+
+```{r}
+#| label: read-data
+#| message: false
+
+es_diab <- read_csv(here::here("data", "early_stage_diabetes.csv"))
+```
+
+```{r}
+#| label: clean-response-vars
+
+es_diab <- es_diab %>%
+  mutate(target = if_else(class == "Negative", "no diabetes", "diabetes"),
+         target = factor(target, levels = c("diabetes", "no diabetes"))) %>%
+  select(-class)
+```
+
+```{r}
+#| label: check-nas-diab_es
+es_diab %>% 
+  is.na() %>%
+  as.data.frame() %>%
+  lapply(FUN = sum) %>%
+  as.data.frame()
+```
+
+```{r}
+#| label: distribution of response variable 
+
+N <- nrow(es_diab)
+es_diab %>%
+  select(target) %>%
+  group_by(target) %>%
+  summarize(n = n()) %>%
+  mutate(prop = n / N)
+```
+
+# Exploratory Data Analysis
+
+## Distribution of Target Variable
+
+```{r}
+es_diab %>%
+  ggplot(aes(x = target, fill = target)) +
+  geom_bar() +
+  labs(title = "Distribution of Target Variable", x = "Target", y = "Count") 
+```
+
+## Age Distribution
+
+```{r}
+es_diab %>%
+  ggplot(aes(x = Age, fill = target)) +
+  geom_histogram(bins = 20, alpha = 0.7, position = "identity") +
+  labs(title = "Age Distribution by Target", x = "Age", y = "Count")
+```
+
+## Gender versus Diabetes
+
+```{r}
+es_diab %>%
+  ggplot(aes(x = Gender, fill = target)) +
+  geom_bar(position = "fill") +
+  labs(title = "Gender vs Diabetes", x = "Gender", y = "Proportion") 
+```
+
+## Polydipsia versus Diabetes (by Gender)
+
+### Excessive Thirst 
+
+```{r}
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = Polydipsia, fill = target), position = "fill") +
+  facet_wrap(~Gender) +
+  labs(title = "Polydipsia vs Diabetes (by Gender)", x = "Polydipsia", y = "Proportion")
+```
+
+## Polyuria versus Diabetes (by Gender) 
+
+### Excessive Urination 
+
+```{r}
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = Polyuria, fill = target), position = "fill") +
+  facet_wrap(~Gender) +
+  labs(title = "Polyuria vs Diabetes (by Gender)", x = "Polyuria", y = "Proportion")
+```
+
+## Polyuria vs Polyuria (by Diabetes)
+
+```{r}
+es_diab %>%
+  ggplot() +
+  geom_jitter(aes(x = Polydipsia, y = Polyuria, color = target)) +
+  facet_wrap(~target) +
+  labs(title = "Polyuria vs Polyuria (by Diabetes)", x = "Polydipsia", y = "Polyuria")
+```
+
+## Sudden Weight Loss versus Diabetes by Gender
+
+```{r}
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = `sudden weight loss`, fill = target), position = "fill") +
+  facet_wrap(~Gender) +
+  labs(title = "Sudden Weight Loss vs Diabetes (by Gender)", 
+       x = "Sudden Weight Loss", 
+       y = "Proportion")
+```
+
+## Weakness vs Diabetes (by Gender)
+
+```{r}
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = weakness, fill = target), position = "fill") +
+  facet_wrap(~Gender) +
+  labs(title = "Weakness vs Diabetes (by Gender)", 
+       x = "Weakness", 
+       y = "Proportion")
+```
+
+## Polyphagia vs Diabetes (by Gender)
+
+### Excessive Hunger 
+
+```{r}
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = Polyphagia, fill = target), position = "fill") +
+  facet_wrap(~Gender) +
+  labs(title = "Polyphagia vs Diabetes (by Gender)", 
+       x = "Polyphagia", 
+       y = "Proportion")
+```
+
+## Delayed Healing vs Diabetes (by Gender)
+
+Not an important predictor from the plot, just shows male vs female difference
+
+```{r}
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = `delayed healing`, fill = target), position = "fill") +
+  facet_wrap(~Gender) +
+  labs(title = "Delayed Healing vs Diabetes (by Gender)", 
+       x = "Delayed Healing", 
+       y = "Proportion")
+```
+
+## Obesity vs Diabetes (by Gender)
+
+Not an important predictor from the plot (especially for women), mainly just shows male vs female difference
+
+```{r}
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = Obesity, fill = target), position = "fill") +
+  facet_wrap(~Gender) +
+  labs(title = "Obesity vs Diabetes (by Gender)", 
+       x = "Obesity", 
+       y = "Proportion")
+```
+
+## Genital Thrush vs Diabetes (by Gender)
+
+```{r}
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = `Genital thrush`, fill = target), position = "fill") +
+  facet_wrap(~Gender) +
+  labs(title = "Genital Thrush vs Diabetes (by Gender)", 
+       x = "Genital Thrush", 
+       y = "Proportion")
+```
+
+## Visual Blurring vs Diabetes (by Gender)
+
+```{r}
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = `visual blurring`, fill = target), position = "fill") +
+  facet_wrap(~Gender) +
+  labs(title = "Visual Blurring vs Diabetes (by Gender)", 
+       x = "Visual Blurring", 
+       y = "Proportion")
+```
+
+## Partial Paresis vs Diabetes (by Gender)
+
+### Weakness or reduced muscle strength
+
+```{r}
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = `partial paresis`, fill = target), position = "fill") +
+  facet_wrap(~Gender) +
+  labs(title = "Partial Paresis vs Diabetes (by Gender)", 
+       x = "Partial Paresis", 
+       y = "Proportion")
+```
+
+## Irritability vs Diabetes (by Gender)
+
+```{r}
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = Irritability, fill = target), position = "fill") +
+  facet_wrap(~Gender) +
+  labs(title = "Irritability vs Diabetes (by Gender)", 
+       x = "Irritability", 
+       y = "Proportion")
+```
+
+## Itching vs Diabetes (by Gender)
+
+Not an important predictor from the plot, just shows male vs female difference
+
+```{r}
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = Itching, fill = target), position = "fill") +
+  facet_wrap(~Gender) +
+  labs(title = "Itching vs Diabetes (by Gender)", 
+       x = "Itching", 
+       y = "Proportion")
+```
+
+## Alopecia vs Diabetes (by Gender)
+
+```{r}
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = Alopecia, fill = target), position = "fill") +
+  facet_wrap(~Gender) +
+  labs(title = "Alopecia vs Diabetes (by Gender)", 
+       x = "Alopecia", 
+       y = "Proportion")
+```
+
+## Muscle Stiffness vs Diabetes (by Gender)
+
+Not an important predictor from the plot, mainly just shows male vs female difference
+
+```{r}
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = `muscle stiffness`, fill = target), position = "fill") +
+  facet_wrap(~Gender) +
+  labs(title = "Muscle Stiffness vs Diabetes (by Gender)", 
+       x = "Muscle Stiffness", 
+       y = "Proportion")
+```
+
+# Preliminary Results 
+
+## Set-Up
+
+```{r}
+#| label: cross validation
+
+es_diab_cv <- vfold_cv(es_diab, v = 10)
+```
+
+```{r}
+#| label: recipes 
+
+recipe <- recipe(target ~ ., 
+                   data = es_diab) %>%
+  step_dummy(all_nominal_predictors()) %>% 
+  step_normalize(all_numeric_predictors()) 
+
+recipe_tree <- recipe(target ~ ., 
+                   data = es_diab) 
+
+recipe_pca <- recipe(target ~ ., 
+                   data = es_diab) %>%
+  step_dummy(all_nominal_predictors()) %>% 
+  step_normalize(all_numeric_predictors()) %>%            
+  step_pca(all_predictors()) 
+```
+
+## Logistic Regression
+
+```{r}
+#| label: logistic regression 
+
+logit_mod <- logistic_reg() %>%
+  set_mode("classification") %>%
+  set_engine("glm")
+
+logit_wflow <- workflow() %>%
+  add_recipe(recipe) %>%
+  add_model(logit_mod)
+
+cv_results <- fit_resamples(
+  logit_wflow,
+  resamples = es_diab_cv,
+  metrics = metric_set(roc_auc, accuracy, precision, recall, brier_class)
+)
+
+collect_metrics(cv_results)
+```
+
+## Logistic Regression with Elastic Net 
+
+```{r}
+#| label: logistic regression with elastic net
+
+elastic_net_mod <- logistic_reg(
+  penalty = tune(),
+  mixture = tune()
+) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+elastic_net_wflow <- workflow() %>%
+  add_recipe(recipe) %>%
+  add_model(elastic_net_mod)
+
+elastic_net_grid <- grid_regular(
+  penalty(range = c(0.001, 1)),
+  mixture(range = c(0, 1)),
+  levels = 10
+)
+
+cv_results <- tune_grid(
+  elastic_net_wflow,
+  resamples = es_diab_cv,
+  grid = elastic_net_grid,
+  metrics = metric_set(roc_auc, accuracy, precision, recall, brier_class)
+)
+
+metrics <- collect_metrics(cv_results)
+
+metrics %>%
+    filter(.metric == "roc_auc") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "accuracy") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "precision") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "recall") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "brier_class") %>%
+    arrange(mean)
+```
+
+## Decision Tree
+
+```{r}
+#| label: decision tree
+
+tree_mod <- decision_tree(
+  cost_complexity = tune(),
+  tree_depth = tune()
+) %>%
+  set_mode("classification") %>%
+  set_engine("rpart")
+
+tree_wflow <- workflow() %>%
+  add_recipe(recipe_tree) %>%
+  add_model(tree_mod)
+
+tree_grid <- grid_regular(
+  cost_complexity(range = c(0.001, 0.1)),
+  tree_depth(range = c(1, 20)),
+  levels = 10
+)
+
+cv_results <- tune_grid(
+  tree_wflow,
+  resamples = es_diab_cv,
+  grid = tree_grid,
+  metrics = metric_set(roc_auc, accuracy, precision, recall, brier_class)
+)
+
+metrics <- collect_metrics(cv_results)
+
+metrics %>%
+    filter(.metric == "roc_auc") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "accuracy") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "precision") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "recall") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "brier_class") %>%
+    arrange(mean)
+```
+
+```{r}
+#| label: decision tree plot
+
+mod_dt <- decision_tree() %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+
+wflow_dt <- workflow() %>%
+  add_recipe(recipe_tree) %>%
+  add_model(mod_dt)
+
+fit_dt <- wflow_dt %>%
+  fit(es_diab)
+
+fitted_dt <- fit_dt %>% 
+  extract_fit_parsnip()
+
+rpart.plot(fitted_dt$fit, roundint = FALSE)
+```
+
+## Random Forest 
+
+```{r}
+#| label: random forest
+
+rf_mod <- rand_forest(
+  mtry = tune(),
+  min_n = tune(),
+  trees = 100
+) %>%
+  set_mode("classification") %>%
+  set_engine("ranger")
+
+rf_wflow <- workflow() %>%
+  add_recipe(recipe_tree) %>%
+  add_model(rf_mod)
+
+rf_grid <- grid_regular(
+  mtry(range = c(1, 16)),
+  min_n(range = c(2, 10)),
+  levels = 10
+)
+
+cv_results <- tune_grid(
+  rf_wflow,
+  resamples = es_diab_cv,
+  grid = rf_grid,
+  metrics = metric_set(roc_auc, accuracy, precision, recall, brier_class)
+)
+
+metrics <- collect_metrics(cv_results)
+
+metrics %>%
+    filter(.metric == "roc_auc") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "accuracy") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "precision") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "recall") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "brier_class") %>%
+    arrange(mean)
+```
+
+## Random Forest with PCA 
+
+```{r}
+#| label: random forest with pca 
+
+rf_mod <- rand_forest(
+  mtry = tune(),
+  min_n = tune(),
+  trees = 100
+) %>%
+  set_mode("classification") %>%
+  set_engine("ranger")
+
+rf_pca_wflow <- workflow() %>%
+  add_recipe(recipe_pca) %>%
+  add_model(rf_mod)
+
+rf_grid <- grid_regular(
+  mtry(range = c(1, 16)),
+  min_n(range = c(2, 10)),
+  levels = 10
+)
+
+cv_results <- tune_grid(
+  rf_pca_wflow,
+  resamples = es_diab_cv,
+  grid = rf_grid,
+  metrics = metric_set(roc_auc, accuracy, precision, recall, brier_class)
+)
+
+metrics <- collect_metrics(cv_results)
+
+metrics %>%
+    filter(.metric == "roc_auc") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "accuracy") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "precision") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "recall") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "brier_class") %>%
+    arrange(mean)
+```

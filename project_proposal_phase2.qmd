@@ -5,12 +5,12 @@ format: html
 editor: visual
 ---
 
-# Introduction 
+# Introduction
 
-# Previous Work 
+# Previous Work
 
-# Exploratory Analysis 
+# Exploratory Analysis
 
-# Preliminary Results 
+# Preliminary Results
 
-# Project Timeline and Goals 
+# Project Timeline and Goals
