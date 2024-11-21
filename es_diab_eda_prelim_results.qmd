@@ -84,7 +84,7 @@ es_diab %>%
 
 ## Polydipsia versus Diabetes (by Gender)
 
-### Excessive Thirst 
+### Excessive Thirst
 
 ```{r}
 es_diab %>%
@@ -94,9 +94,9 @@ es_diab %>%
   labs(title = "Polydipsia vs Diabetes (by Gender)", x = "Polydipsia", y = "Proportion")
 ```
 
-## Polyuria versus Diabetes (by Gender) 
+## Polyuria versus Diabetes (by Gender)
 
-### Excessive Urination 
+### Excessive Urination
 
 ```{r}
 es_diab %>%
@@ -142,7 +142,7 @@ es_diab %>%
 
 ## Polyphagia vs Diabetes (by Gender)
 
-### Excessive Hunger 
+### Excessive Hunger
 
 ```{r}
 es_diab %>%
@@ -272,7 +272,7 @@ es_diab %>%
        y = "Proportion")
 ```
 
-# Preliminary Results 
+# Preliminary Results
 
 ## Set-Up
 
@@ -287,16 +287,16 @@ es_diab_cv <- vfold_cv(es_diab, v = 10)
 
 recipe <- recipe(target ~ ., 
                    data = es_diab) %>%
-  step_dummy(all_nominal_predictors()) %>% 
-  step_normalize(all_numeric_predictors()) 
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors())
 
 recipe_tree <- recipe(target ~ ., 
                    data = es_diab) 
 
 recipe_pca <- recipe(target ~ ., 
                    data = es_diab) %>%
-  step_dummy(all_nominal_predictors()) %>% 
-  step_normalize(all_numeric_predictors()) %>%            
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors()) %>%            
   step_pca(all_predictors()) 
 ```
 
@@ -322,7 +322,7 @@ cv_results <- fit_resamples(
 collect_metrics(cv_results)
 ```
 
-## Logistic Regression with Elastic Net 
+## Logistic Regression with Elastic Net
 
 ```{r}
 #| label: logistic regression with elastic net
@@ -446,7 +446,7 @@ fitted_dt <- fit_dt %>%
 rpart.plot(fitted_dt$fit, roundint = FALSE)
 ```
 
-## Random Forest 
+## Random Forest
 
 ```{r}
 #| label: random forest
@@ -499,7 +499,7 @@ metrics %>%
     arrange(mean)
 ```
 
-## Random Forest with PCA 
+## Random Forest with PCA
 
 ```{r}
 #| label: random forest with pca 
