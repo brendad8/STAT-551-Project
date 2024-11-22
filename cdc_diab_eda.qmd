@@ -11,16 +11,20 @@ editor: visual
 
 ```{r}
 #| label: load-packages
+#| message: false
 
 library(tidyverse)
 library(tidymodels)
+library(rpart)
+library(rpart.plot)
+library(glmnet)
 ```
 
 ```{r}
 #| label: read-in-data
+#| message: false
 
 diab <- read_csv(here::here("data", "diabetes_full.csv")) # brendan doing this one
-
 ```
 
 ### Data Cleaning
@@ -119,7 +123,7 @@ diab %>%
 ```{r}
 diab %>%
   ggplot() +
-  geom_bar(aes(x = HighBP, fill = target), position = "fill") +
+  geom_bar(aes(x = HighBP, fill = target), position = "fill") + 
   facet_wrap(~Sex)
 ```
 
@@ -140,4 +144,67 @@ diab %>%
 diab %>%
   ggplot() +
   geom_bar(aes(x = Stroke, fill = target), position = "fill")
+```
+
+## Model Fitting
+
+```{r}
+#| label: model-fitting-setup
+
+diab_cvs = vfold_cv(diab, v = 5)
+```
+
+```{r}
+#| label: recipes
+
+rec_full <- recipe(target~., data = diab) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+```
+
+```{r}
+#| label: fit-lasso
+
+pen_grid <- grid_regular(penalty(), levels = 10)
+
+lasso_spec_tune <- logistic_reg(mixture = 1, penalty = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+lasso_wflow_tune <- workflow() %>%
+  add_model(lasso_spec_tune) %>%
+  add_recipe(rec_full)
+
+cv_results <- tune_grid(
+  lasso_wflow_tune,
+  resamples = diab_cvs,
+  grid = pen_grid
+)
+```
+
+```{r}
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "accuracy") %>%
+  arrange(desc(mean))
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "roc_auc") %>%
+  arrange(desc(mean))
+```
+
+```{r}
+lasso_spec <- logistic_reg(mixture = 1, penalty = 1e-10) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+lasso_wflow <- workflow() %>%
+  add_model(lasso_spec) %>%
+  add_recipe(rec_full)
+
+lasso_fit <- lasso_wflow %>% fit(diab)
+
+tidy(lasso_fit) %>%
+  arrange(estimate)
 ```
