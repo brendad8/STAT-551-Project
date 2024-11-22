@@ -1,0 +1,315 @@
+---
+title: "CVD Analysis"
+author: Jacob Perez
+format: html
+editor: visual
+code-fold: true
+---
+
+# Setup & Data Cleaning
+
+```{r}
+#| label: load-packages
+
+library(tidyverse)
+library(tidymodels)
+library(glmnet)
+library(discrim)
+library(rpart)
+library(rpart.plot)
+library(baguette)
+library(tune)
+```
+
+```{r}
+#| label: read-data
+#| message: false
+
+cvd <- read_csv(here::here("data", "cvd_data.csv"))
+```
+
+```{r}
+#| label: clean-response-vars
+
+cvd <- cvd %>%
+  mutate(target = if_else(target == 0, "no heart disease", "heart disease"),
+         target = factor(target, levels = c("heart disease", "no heart disease")),
+         gender = if_else(gender == 0, "female", "male"),
+         gender = as.factor(gender),
+         chestpain = case_when(chestpain == 0 ~ "typical angina",
+                               chestpain == 1 ~ "atypical angina",
+                               chestpain == 2 ~ "non-anginal pain",
+                               chestpain == 3 ~ "asymptomatic"),
+         chestpain = as.factor(chestpain),
+         fastingbloodsugar = if_else(fastingbloodsugar == 0, "false", "true"))
+```
+
+```{r}
+cvd
+```
+
+# Distribution of Response Variables
+
+## Cardiovascular Disease Dataset
+
+```{r}
+N <- nrow(cvd)
+cvd %>%
+  select(target) %>%
+  group_by(target) %>%
+  summarize(n = n()) %>%
+  mutate(prop = n / N)
+```
+
+## Cardiovascular Disease
+
+From the plot we see very high values of Serum cholesterol are associated with having heart disease. Also restingelectro = 2 is associated with heart disease compared to other values of resting electro. This trend appears to be the same for both men and women.
+
+```{r}
+cvd %>%
+  ggplot(aes(x = restingrelectro, y = serumcholestrol, color = target)) +
+  geom_jitter() +
+  labs(title = "Resting Electro and Serum Cholesterol vs CVD") +
+  theme(plot.title.position = "plot") +
+  facet_wrap(~gender)
+```
+
+From the plot below, we see that larger values of both slope and Number of major vessels are associated with having heart disease. This trend appears to be the same for both men and women.
+
+```{r}
+cvd %>%
+  ggplot(aes(x = noofmajorvessels, y = slope, color = target)) +
+  geom_jitter() +
+  labs(title = "Slope and Number of Major Vessels vs CVD") +
+  theme(plot.title.position = "plot") + 
+  facet_wrap(~gender)
+```
+
+From the plot below, Chestpain values of 1,2,3 are more associated with heart disease while chest pain = 0 is more associated with no heart disease. This trend is the same for both men and women.
+
+```{r}
+cvd %>%
+  ggplot(aes(x = chestpain, fill = target)) +
+  geom_bar(bins = 10, position = "dodge") +
+  theme(legend.position = "none") +
+  facet_wrap(~gender) +
+  labs(title = "Chest Pain vs CVD by Gender") +
+  theme(plot.title.position = "plot")
+```
+
+The plot below shows that larger values of Resting BP are associated with higher rates of having heart disease. Max heart rate appears to not have a clear pattern with respect to predicting heart disease. This trend appears to be slightly different for men and women.
+
+```{r}
+cvd %>%
+  ggplot(aes(x = maxheartrate, y = restingBP, color = target)) +
+  geom_point()  +
+  labs(title = "Resting BP and Max Heart Rate vs CVD") +
+  theme(plot.title.position = "plot") +
+  facet_wrap(~gender)
+```
+
+## Lets Explore Mixture Models
+
+```{r}
+cvd_cv <- vfold_cv(cvd, v = 5)
+```
+
+```{r}
+rec1 <- recipe(target ~ ., data = cvd) %>%
+  step_rm(patientid) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_normalize(all_numeric_predictors())
+```
+
+```{r}
+net_grid <- grid_regular(penalty(),
+                         mixture(),
+                         levels = 10)
+
+elas_net_spec <- logistic_reg(penalty = tune(),
+                            mixture = tune()) %>%
+  set_engine("glmnet") %>%
+  set_mode("classification")
+```
+
+```{r, Mixture Model}
+wflow_elas_net <- workflow() %>%
+  add_model(elas_net_spec) %>%
+  add_recipe(rec1)
+```
+
+```{r}
+wflow_elas_net %>%
+  tune_grid(
+    resamples = cvd_cv,
+    grid = net_grid
+  ) %>%
+  collect_metrics() %>%
+  filter(.metric == "roc_auc") %>%
+  arrange(desc(mean))
+
+wflow_elas_net %>%
+  tune_grid(
+    resamples = cvd_cv,
+    grid = net_grid
+  ) %>%
+  collect_metrics() %>%
+  filter(.metric == "accuracy") %>%
+  arrange(desc(mean))
+```
+
+### Model Fit 1
+
+```{r}
+model_fit1 <- logistic_reg(penalty = 0.005994843,
+                            mixture = 0.4444444) %>%
+  set_engine("glmnet") %>%
+  set_mode("classification")
+
+fit_model1 <- workflow() %>%
+  add_model(model_fit1) %>%
+  add_recipe(rec1) %>%
+  fit(cvd)
+```
+
+```{r}
+tidy(fit_model1) %>%
+  arrange((desc(abs(estimate))))
+```
+
+### Model Fit 2
+
+```{r}
+model_fit2 <- logistic_reg(penalty = 0.0004641589,
+                            mixture = 1) %>%
+  set_engine("glmnet") %>%
+  set_mode("classification")
+
+fit_model2 <- workflow() %>%
+  add_model(model_fit2) %>%
+  add_recipe(rec1) %>%
+  fit(cvd)
+```
+
+```{r}
+tidy(fit_model2) %>%
+  arrange((desc(abs(estimate))))
+```
+
+## Logistic Model
+
+```{r}
+logit_mod <- logistic_reg() %>%
+  set_mode("classification") %>%
+  set_engine("glm")
+```
+
+```{r}
+lr_wflow1 <- workflow() %>%
+  add_model(logit_mod) %>%
+  add_recipe(rec1)
+
+lr_wflow1 %>%
+  fit_resamples(cvd_cv) %>%
+  collect_metrics()
+```
+
+```{r}
+lr_final <- lr_wflow1 %>%
+  fit(cvd)
+```
+
+## KNN
+
+```{r}
+k_grid <- grid_regular(neighbors(),
+                       levels = 5)
+
+knn_mod_tune <- nearest_neighbor(neighbors = tune()) %>%
+  set_engine("kknn") %>%
+  set_mode("classification")
+```
+
+```{r}
+knn_wflow <- workflow() %>%
+  add_recipe(rec2) %>%
+  add_model(knn_mod_tune)
+
+tune_grid(knn_wflow,
+          resamples = cvd_cv,
+          grid = k_grid) %>%
+  collect_metrics()
+```
+
+## Classification Trees
+
+```{r}
+tree_mod <- decision_tree() %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+
+tree_grid <- grid_regular(cost_complexity(),
+                          tree_depth(),
+                          min_n(),
+                          levels = 2)
+
+tree_mod2 <- decision_tree(cost_complexity = tune(),
+                           tree_depth = tune(),
+                           min_n = tune()) %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+```
+
+```{r}
+tree_wflow1 <- workflow() %>%
+  add_model(tree_mod) %>%
+  add_recipe(rec1)
+
+tree_wflow1 %>%
+  fit_resamples(cvd_cv) %>%
+  collect_metrics()
+```
+
+### Lets Tune
+
+```{r}
+tree_wflow2 <- workflow() %>%
+  add_model(tree_mod2) %>%
+  add_recipe(rec1)
+
+tune_grid(tree_wflow2,
+    resamples = cvd_cv,
+    grid = tree_grid) %>%
+  collect_metrics() %>%
+  group_by(.metric) %>%
+  arrange(desc(mean))
+```
+
+## Random Forests
+
+```{r}
+mtry_grid <- grid_regular(mtry(c(1, 13)),
+                          min_n(),
+                          levels = 6)
+
+rf_mod <- rand_forest(mtry = tune(),
+                      min_n = tune(),
+                      trees = 10) %>%
+  set_engine("ranger") %>%
+  set_mode("classification")
+```
+
+```{r, Random Forests, eval = FALSE}
+rf_wflow <- workflow() %>%
+  add_model(rf_mod) %>%
+  add_recipe(rec1)
+
+rf_wflow %>%
+  tune_grid(
+    grid = mtry_grid,
+    resamples = cvd_cv
+  ) %>%
+  collect_metrics() %>%
+  group_by(.metric) %>%
+  arrange(desc(mean))
+```
