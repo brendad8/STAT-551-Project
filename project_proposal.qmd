@@ -1,0 +1,251 @@
+---
+title: "Project Proposal"
+author: "Rachel Roggenkemper, Jacob Perez, and Brendan Callender"
+format: pdf
+editor: visual
+embed-resources: true
+---
+
+## I. Introduction
+
+Your organization, the American College of Cardiology (ACC), is dedicated to improving cardiovascular health by providing healthcare professionals with cutting-edge tools and resources to enhance patient care. Recognizing that there is a crucial connection between diabetes and cardiovascular disease, we aim to support your mission by developing a predictive algorithm to help doctors assess patient risk for diabetes and cardiovascular disease. In particular, we aim to develop an algorithm which accurately predicts patient risk for both males and females to create more equitable patient outcomes. Additionally, our algorithm will address the variability in diagnoses across doctors by offering a data-driven approach that can be consistently used across practices to make patient diagnoses more consistent, enabling earlier interventions and improved outcomes.  
+
+\
+The strong association between diabetes and cardiovascular diseases emphasizes the need for an integrated approach to risk assessment. Leveraging data from a multispecialty hospital in India, the CDC’s Diabetes Health Indicators dataset, and a diabetes-focused study from Sylhet Diabetes Hospital in Bangladesh, we will analyze key predictors of patient risk within these disease states. Our algorithm will emphasize the use of clinically accessible variables, ensuring practicality and ease of use in healthcare settings. This will empower doctors to make informed, consistent decisions, aligning with the ACC’s goals of advancing medical practice through innovation. 
+
+\
+We will provide your organization with a comprehensive predictive tool that enhances diagnostic consistency and reduces false negatives, or cases where patients are not treated when they should be, directly benefiting patients at risk. By facilitating earlier detection of diabetes and cardiovascular diseases, our project aligns with ACC’s mission to transform cardiovascular care and improve heart health. Together, we can ensure that healthcare providers are better equipped to address these interconnected conditions, ultimately saving lives and enhancing the quality of care.
+
+## **II. Previous Work**
+
+1.  [Machine learning in precision diabetes care and cardiovascular risk prediction](https://cardiab.biomedcentral.com/articles/10.1186/s12933-023-01985-3)
+
+This article explores the application of machine learning algorithms, including random forests, gradient boosting machines, and neural networks, to personalize diabetes management and predict cardiovascular risk. The study emphasizes the potential for advanced algorithms to improve diagnostic accuracy and guide treatment decisions. The authors evaluate model performance using metrics such as accuracy, precision, recall, and F1 score to assess the effectiveness of different models. The authors also discuss the regulatory framework surrounding clinical decision support (CDS) tools and how they require rigorous testing before use which our models would also require. Similar to our project, the authors seek to improve patient outcomes  using data-driven methods to better predict diabetes and cardiovascular diseases. One distinction is that our project emphasizes equal model effectiveness for both males and females which will require thorough exploratory analysis and testing.
+
+2.  [A data-driven approach to predicting diabetes and cardiovascular disease with machine learning](https://bmcmedinformdecismak.biomedcentral.com/articles/10.1186/s12911-019-0918-5)
+
+This article evaluates several machine learning models, including logistic regression, decision trees, random forests, and support vector machines, to predict the risk of diabetes and cardiovascular disease. The study uses metrics such as accuracy and ROC-AUC, highlighting ROC-AUC’s value in maintaining consistent performance when adjusting classification thresholds. The authors demonstrate that including lab variables significantly enhances model accuracy, while models relying only on non-lab variables remain viable for broader application scenarios. Similar to our project, this study emphasizes the importance of metrics like ROC-AUC and uses interpretable methods such as decision trees. Our project will also measure model success using ROC-AUC however, we will also consider the specificity of models which will measure a model's ability to prevent false negatives. Additionally, while this article developed separate models for scenarios with and without lab variables, our project seeks to integrate both types of variables into a single model to ensure broader usability. 
+
+3.  [Building Risk Prediction Models for Type 2 Diabetes Using Machine Learning Techniques](https://www.cdc.gov/pcd/issues/2019/19_0109.htm)
+
+This article outlines a study that uses data from the 2014 Behavioral Risk Factor Surveillance System to build predictive models for Type II diabetes using various machine learning techniques such as support vector machines, decision trees, random forests, neural networks, Gaussian Naive Bayes, and logistic regression. The models were evaluated using metrics such as accuracy, sensitivity, specificity, and ROC-AUC. While the neural network achieved the best overall performance, the decision tree was preferred for its higher sensitivity, making it suitable for initial screenings. In addition to identifying well-known risk factors like age and BMI, the study highlighted new potential risk factors such as oversleeping and frequent health checkups. Unlike this study, which focused exclusively on Type II diabetes, our project aims to develop model predictions for both diabetes and cardiovascular disease for clinical use by doctors. Additionally, we emphasize ensuring equitable outcomes for males and females, addressing biases which were not a focus of this study.
+
+## III. Exploratory Analysis
+
+```{r}
+#| label: setup-packages
+#| include: false
+
+library(tidyverse)
+```
+
+```{r}
+#| label: read-in-data
+#| include: false
+
+cvd <- read_csv(here::here("data", "cvd_data.csv"))
+diab <- read_csv(here::here("data", "diabetes_full.csv")) 
+es_diab <- read_csv(here::here("data", "early_stage_diabetes.csv"))
+```
+
+```{r}
+#| label: map-response-vars
+#| include: false
+
+cvd <- cvd %>%
+  mutate(target = if_else(target == 0, "No Heart Disease", "Heart Disease"),
+         target = factor(target, levels = c("Heart Disease", "No Heart Disease")))
+
+diab <- diab %>%
+  mutate(
+    target = case_when(
+      Diabetes_012 == 0 ~ "No Diabetes",
+      Diabetes_012 == 1 ~ "Diabetes", # prediabetes
+      Diabetes_012 == 2 ~ "Diabetes"
+  ),
+    target = factor(target, levels = c("Diabetes", "No Diabetes"))
+  ) %>%
+  select(-Diabetes_012)
+
+es_diab <- es_diab %>%
+  mutate(target = if_else(class == "Negative", "No Diabetes", "Diabetes"),
+         target = factor(target, levels = c("Diabetes", "No Diabetes"))) %>%
+  select(-class)
+```
+
+### Distribution of Diagnoses
+
+talk about distributions
+
+```{r}
+#| label: dist-of-response-vars
+#| layout-ncol: 3
+#| echo: false
+
+N <- nrow(cvd)
+cvd %>%
+  select(target) %>%
+  group_by(target) %>%
+  summarize(n = n()) %>%
+  mutate(prop = n / N)  %>%
+  ggplot() +
+  geom_bar(aes(x = target, y = prop, fill = target), stat = "identity") +
+  scale_y_continuous(limits=c(0,0.6), expand=c(0,0)) +
+  theme(
+    axis.line.x = element_line(),
+    axis.line.y = element_line(),
+    panel.background = element_blank(),
+    axis.text.x = element_text(size = 12),
+    legend.position = "none",
+    plot.title.position = "plot"
+  ) +
+  labs(title = "CVD Dataset: Heart Disease Prevelence", x = "", y = "")
+
+N <- nrow(diab)
+diab %>%
+  select(target) %>%
+  group_by(target) %>%
+  summarize(n = n()) %>%
+  mutate(prop = n / N) %>%
+  ggplot() +
+  geom_bar(aes(x = target, y = prop, fill = target), stat = "identity") +
+  scale_y_continuous(limits=c(0,0.85), expand=c(0,0)) +
+  theme(
+    axis.line.x = element_line(),
+    axis.line.y = element_line(),
+    panel.background = element_blank(),
+    axis.text.x = element_text(size = 12),
+    legend.position = "none",
+    plot.title.position = "plot"
+  ) +
+  labs(title = "CDC Diabetes Dataset: Diabetes Prevelence", x = "", y = "")
+
+N <- nrow(es_diab)
+es_diab %>%
+  select(target) %>%
+  group_by(target) %>%
+  summarize(n = n()) %>%
+  mutate(prop = n / N) %>%
+  ggplot() +
+  geom_bar(aes(x = target, y = prop, fill = target), stat = "identity") +
+  scale_y_continuous(limits=c(0,0.65), expand=c(0,0)) +
+  theme(
+    axis.line.x = element_line(),
+    axis.line.y = element_line(),
+    panel.background = element_blank(),
+    axis.text.x = element_text(size = 12),
+    legend.position = "none",
+    plot.title.position = "plot"
+  ) +
+  labs(title = "Early Stage Diabetes Dataset: Diabetes Prevelence", x = "", y = "")
+```
+
+### Distribution of Gender within Diagnoses
+
+talk about distributions
+
+```{r}
+#| label: dist-of-gender-and-response-vars
+#| layout-ncol: 3
+#| echo: false
+#| warning: false
+#| message: false
+
+N <- nrow(cvd)
+cvd %>%
+  mutate(Gender = if_else(gender == 0, "Female", "Male")) %>%
+  select(Gender, target) %>%
+  group_by(Gender, target) %>%
+  summarize(n = n()) %>%
+  mutate(prop = n / N)  %>%
+  ggplot() +
+  geom_bar(aes(x = target, y = prop, fill = Gender), stat = "identity", position = "dodge") +
+  scale_y_continuous(limits=c(0,0.5), expand=c(0,0)) +
+  theme(
+    axis.line.x = element_line(),
+    axis.line.y = element_line(),
+    panel.background = element_blank(),
+    axis.text.x = element_text(size = 12),
+    legend.text = element_text(size = 12),
+    plot.title.position = "plot"
+  ) +
+  labs(title = "CVD Dataset: Distribution of Gender w/in Diagnosis", x = "", y = "")
+
+
+N <- nrow(diab)
+diab %>%
+  mutate(Gender = if_else(Sex == 0, "Female", "Male")) %>%
+  select(Gender, target) %>%
+  group_by(Gender, target) %>%
+  summarize(n = n()) %>%
+  mutate(prop = n / N)  %>%
+  ggplot() +
+  geom_bar(aes(x = target, y = prop, fill = Gender), stat = "identity", position = "dodge") +
+  scale_y_continuous(limits=c(0,0.5), expand=c(0,0)) +
+  theme(
+    axis.line.x = element_line(),
+    axis.line.y = element_line(),
+    axis.text.x = element_text(size = 12),
+    legend.text = element_text(size = 12),
+    panel.background = element_blank(),
+    plot.title.position = "plot"
+  ) +
+  labs(title = "CDC Diabetes Dataset: Distribution of Gender w/in Diagnosis", x = "", y = "")
+
+N <- nrow(es_diab)
+es_diab %>%
+  select(Gender, target) %>%
+  group_by(Gender, target) %>%
+  summarize(n = n()) %>%
+  mutate(prop = n / N) %>%
+  ggplot() +
+  geom_bar(aes(x = target, y = prop, fill = Gender), stat = "identity", position = "dodge") +
+  scale_y_continuous(limits=c(0,0.65), expand=c(0,0)) +
+  theme(
+    axis.line.x = element_line(),
+    axis.line.y = element_line(),
+    axis.text.x = element_text(size = 12),
+    legend.text = element_text(size = 12),
+    panel.background = element_blank(),
+    plot.title.position = "plot"
+  ) +
+  labs(title = "Early Stage Diabetes Dataset: Distribution of Gender w/in Diagnosis", x = "", y = "")
+```
+
+### Relationship between Predictors and Diagnoses
+
+#### Cardiovascular Disease Dataset
+
+talk about it
+
+```{r}
+#| label: cvd-dataset-eda
+#| layout-ncol: 2
+#| echo: false
+#| warning: false
+#| message: false
+
+cvd %>%
+  mutate(Gender = if_else(gender == 0, "Female", "Male")) %>%
+  ggplot(aes(x = maxheartrate, y = restingBP, color = target)) +
+  geom_point()  +
+  labs(title = "Resting BP and Max Heart Rate vs CVD") +
+  theme(plot.title.position = "plot") +
+  facet_wrap(~Gender) +
+  labs(x = "Max Heart Rate", y = "Resting Blood Pressure")
+
+cvd %>%
+  mutate(Gender = if_else(gender == 0, "Female", "Male")) %>%
+  ggplot(aes(x = noofmajorvessels, y = slope, color = target)) +
+  geom_jitter() +
+  labs(title = "Slope and Number of Major Vessels vs CVD") +
+  theme(plot.title.position = "plot") + 
+  facet_wrap(~Gender) +
+  labs(y = "ECG Slope of Peak Excercise", x = "Number of Major Vessels")
+
+
+```
+
+#### CDC Diabetes Dataset
+
+#### Early Stage Diabetes Dataset
