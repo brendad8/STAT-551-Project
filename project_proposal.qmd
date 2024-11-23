@@ -367,7 +367,7 @@ Please note: This document is the project proposal
 
 | **Date** | **Deliverable** | **Description** |
 |---------|---------------|-------------------------------------------------|
-| 11/22/24 | Project Proposal | Document describing initial project goals and discussion of initial dataset exploration model fitting results. |
+| 11/22/24 | Project Proposal | Document describing initial project goals, discussion of initial dataset exploration, and preliminary model fitting results. |
 |  |  |  |
 | 12/6/24 | Final Report | Final report including discussion of final results, model use instructions, limitations of project, and next steps. |
 |  |  |  |
