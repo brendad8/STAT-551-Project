@@ -1,6 +1,6 @@
 ---
 title: "CVD Analysis"
-author: Jacob Perez
+author: "Jacob Perez""
 format: html
 editor: visual
 code-fold: true
@@ -210,7 +210,7 @@ lr_wflow1 <- workflow() %>%
   add_recipe(rec1)
 
 lr_wflow1 %>%
-  fit_resamples(cvd_cv) %>%
+  fit_resamples(cvd_cv, metrics = metric_set(accuracy, roc_auc, sensitivity)) %>%
   collect_metrics()
 ```
 

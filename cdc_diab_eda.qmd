@@ -130,7 +130,8 @@ diab %>%
 ```{r}
 diab %>%
   ggplot() +
-  geom_density(aes(x = BMI, color = target))
+  geom_density(aes(x = BMI, color = target)) +
+  facet_wrap(~Sex)
 ```
 
 ```{r}
@@ -143,7 +144,15 @@ diab %>%
 ```{r}
 diab %>%
   ggplot() +
-  geom_bar(aes(x = Stroke, fill = target), position = "fill")
+  geom_bar(aes(x = Stroke, fill = target), position = "fill") +
+  facet_wrap(~Sex)
+```
+
+```{r}
+diab %>%
+  ggplot() +
+  geom_bar(aes(x = HighBP, fill = target), position = "fill") +
+  facet_wrap(~Stroke + Sex)
 ```
 
 ## Model Fitting
@@ -206,5 +215,14 @@ lasso_wflow <- workflow() %>%
 lasso_fit <- lasso_wflow %>% fit(diab)
 
 tidy(lasso_fit) %>%
-  arrange(estimate)
+  arrange(desc(estimate))
+```
+
+```{r}
+lasso_cv <- lasso_wflow %>% fit_resamples(diab_cvs, metrics = metric_set(roc_auc, accuracy, sensitivity)) 
+```
+
+```{r}
+lasso_cv %>%
+  collect_metrics()
 ```

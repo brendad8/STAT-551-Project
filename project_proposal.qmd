@@ -75,7 +75,7 @@ es_diab <- es_diab %>%
 
 ### Distribution of Diagnoses
 
-talk about distributions
+The grid of plots below shows the distribution of diagnoses across our three datasets. We notice that the cardiovascular disease (CVD) dataset and the early stage diabetes dataset both have somewhat balanced distributions of the response variables. We see that in the CVD dataset has about a 60/40 split with most cases truly having heart disease. The same follows for the early stage diabetes dataset with a 60/40 split with diabetes the majority. However, in the CDC diabetes dataset we notice an imbalance with over 80% of the observations being cases where the patients did not have diabetes. We will have to take into consideration these imbalances when fitting our predictive models.
 
 ```{r}
 #| label: dist-of-response-vars
@@ -92,9 +92,7 @@ cvd %>%
   geom_bar(aes(x = target, y = prop, fill = target), stat = "identity") +
   scale_y_continuous(limits=c(0,0.6), expand=c(0,0)) +
   theme(
-    axis.line.x = element_line(),
-    axis.line.y = element_line(),
-    panel.background = element_blank(),
+    # panel.background = element_blank(),
     axis.text.x = element_text(size = 12),
     legend.position = "none",
     plot.title.position = "plot"
@@ -111,9 +109,7 @@ diab %>%
   geom_bar(aes(x = target, y = prop, fill = target), stat = "identity") +
   scale_y_continuous(limits=c(0,0.85), expand=c(0,0)) +
   theme(
-    axis.line.x = element_line(),
-    axis.line.y = element_line(),
-    panel.background = element_blank(),
+    # panel.background = element_blank(),
     axis.text.x = element_text(size = 12),
     legend.position = "none",
     plot.title.position = "plot"
@@ -130,19 +126,17 @@ es_diab %>%
   geom_bar(aes(x = target, y = prop, fill = target), stat = "identity") +
   scale_y_continuous(limits=c(0,0.65), expand=c(0,0)) +
   theme(
-    axis.line.x = element_line(),
-    axis.line.y = element_line(),
-    panel.background = element_blank(),
+    # panel.background = element_blank(),
     axis.text.x = element_text(size = 12),
     legend.position = "none",
     plot.title.position = "plot"
   ) +
-  labs(title = "Early Stage Diabetes Dataset: Diabetes Prevelence", x = "", y = "")
+  labs(title = "Early Stage Diabetes Dataset: Diabetes Prevelence", x = "", y = "") 
 ```
 
 ### Distribution of Gender within Diagnoses
 
-talk about distributions
+Because we are concerned with having equality of outcomes across gender, we looked into the distribution of the diagnoses within each gender. The plots below show the proportion within each disease state broken up by gender. For the CVD dataset, we notice the distribution of diagnoses is roughly the same for both males and females both having more cases of heart disease. However, we do see there are much more male cases than females cases for both heart disease and no heart disease cases. For the CDC diabetes dataset, we see that the distribution of diabetes diagnoses is roughly the same with there being more female cases for diabetes and no diabetes diagnoses. Lastly, for the early stage diabetes dataset, we see a very large difference in the number of female cases with no diabetes. This imbalance will likely need to be adjusted for in our model fitting process.
 
 ```{r}
 #| label: dist-of-gender-and-response-vars
@@ -162,14 +156,13 @@ cvd %>%
   geom_bar(aes(x = target, y = prop, fill = Gender), stat = "identity", position = "dodge") +
   scale_y_continuous(limits=c(0,0.5), expand=c(0,0)) +
   theme(
-    axis.line.x = element_line(),
-    axis.line.y = element_line(),
-    panel.background = element_blank(),
+    # panel.background = element_blank(),
     axis.text.x = element_text(size = 12),
     legend.text = element_text(size = 12),
     plot.title.position = "plot"
   ) +
-  labs(title = "CVD Dataset: Distribution of Gender w/in Diagnosis", x = "", y = "")
+  labs(title = "CVD Dataset: Distribution of Gender w/in Diagnosis", x = "", y = "") +
+  scale_fill_manual(values = c("#8494FF", "#E68613"))
 
 
 N <- nrow(diab)
@@ -183,14 +176,13 @@ diab %>%
   geom_bar(aes(x = target, y = prop, fill = Gender), stat = "identity", position = "dodge") +
   scale_y_continuous(limits=c(0,0.5), expand=c(0,0)) +
   theme(
-    axis.line.x = element_line(),
-    axis.line.y = element_line(),
     axis.text.x = element_text(size = 12),
     legend.text = element_text(size = 12),
-    panel.background = element_blank(),
+    # panel.background = element_blank(),
     plot.title.position = "plot"
   ) +
-  labs(title = "CDC Diabetes Dataset: Distribution of Gender w/in Diagnosis", x = "", y = "")
+  labs(title = "CDC Diabetes Dataset: Distribution of Gender w/in Diagnosis", x = "", y = "") +
+  scale_fill_manual(values = c("#8494FF", "#E68613"))
 
 N <- nrow(es_diab)
 es_diab %>%
@@ -202,21 +194,23 @@ es_diab %>%
   geom_bar(aes(x = target, y = prop, fill = Gender), stat = "identity", position = "dodge") +
   scale_y_continuous(limits=c(0,0.65), expand=c(0,0)) +
   theme(
-    axis.line.x = element_line(),
-    axis.line.y = element_line(),
     axis.text.x = element_text(size = 12),
     legend.text = element_text(size = 12),
-    panel.background = element_blank(),
+    # panel.background = element_blank(),
+    
     plot.title.position = "plot"
   ) +
-  labs(title = "Early Stage Diabetes Dataset: Distribution of Gender w/in Diagnosis", x = "", y = "")
+  labs(title = "Early Stage Diabetes Dataset: Distribution of Gender w/in Diagnosis", x = "", y = "") +
+  scale_fill_manual(values = c("#8494FF", "#E68613"))
 ```
 
 ### Relationship between Predictors and Diagnoses
 
+In this section we explore some of the relationships between predictors in the dataset to the different diagnoses and also observe if any of the relationships differ across males and females.
+
 #### Cardiovascular Disease Dataset
 
-talk about it
+Below are two plots constructed from the CVD dataset showing the relationship of 2 different predictors to heart disease prevalence. These plots are also broken up by gender to observe any potential interaction effects across males and females. For the plot on the left, we observe that higher resting blood pressure is associated with higher prevalence of heart disease. We notice that heart disease becomes more prevalent around a blood pressure of 180 while it becomes more prevalent for men around 150. For the plot on the right we notice that a higher ECG slope of peak exercise value of 2 or higher is associated with higher rates of diabetes for males and females.
 
 ```{r}
 #| label: cvd-dataset-eda
@@ -230,7 +224,10 @@ cvd %>%
   ggplot(aes(x = maxheartrate, y = restingBP, color = target)) +
   geom_point()  +
   labs(title = "Resting BP and Max Heart Rate vs CVD") +
-  theme(plot.title.position = "plot") +
+  theme(
+    plot.title.position = "plot",
+    axis.text.x = element_text(size = 12),
+    legend.text = element_text(size = 12),) +
   facet_wrap(~Gender) +
   labs(x = "Max Heart Rate", y = "Resting Blood Pressure")
 
@@ -239,7 +236,11 @@ cvd %>%
   ggplot(aes(x = noofmajorvessels, y = slope, color = target)) +
   geom_jitter() +
   labs(title = "Slope and Number of Major Vessels vs CVD") +
-  theme(plot.title.position = "plot") + 
+  theme(
+    plot.title.position = "plot",
+    axis.text.x = element_text(size = 12),
+    legend.text = element_text(size = 12)
+        ) + 
   facet_wrap(~Gender) +
   labs(y = "ECG Slope of Peak Excercise", x = "Number of Major Vessels")
 
@@ -248,4 +249,128 @@ cvd %>%
 
 #### CDC Diabetes Dataset
 
+Below are two plots constructed from the CDC diabetes dataset. These plots are also broken up by gender to observe any potential interaction effects across males and females. For the first plot on the left, we notice that individuals with diabetes tend to have larger BMIs than those without diabetes. This holds true for both males and females. In the second plot, we notice that individuals who had a stroke are more likely to have diabetes than individuals who did not have a stroke. This trend is the same for both males and females. Within this dataset, we noticed most relationships between predictors and the response were the same for males and females. Because the sample size of the CDC dataset is so large, the trends found in our exploratory data analysis are much more reliable than our other datasets which could happen by chance with smaller sample size.
+
+```{r}
+#| label: cdc_diab-dataset-eda
+#| layout-ncol: 2
+#| echo: false
+#| warning: false
+#| message: false
+
+diab %>%
+  mutate(Gender = if_else(Sex == 0, "Female", "Male")) %>%
+  ggplot() +
+  geom_density(aes(x = BMI, color = target)) +
+  facet_wrap(~Gender) +
+  theme(
+    plot.title.position = "plot",
+    axis.text.x = element_text(size = 12),
+    legend.text = element_text(size = 12)
+  ) +
+  scale_y_continuous(expand=c(0,0)) +
+  labs(y = "Density", title = "BMI Distribution by Gender and Disease State")
+
+diab %>%
+  mutate(Stroke = if_else(Stroke == 1, "Stroke", "No Stroke"),
+         Gender = if_else(Sex == 0, "Female", "Male")) %>%
+  ggplot() +
+  geom_bar(aes(x = factor(Stroke), fill = target), position = "fill") +
+  scale_y_continuous(expand=c(0,0)) +
+  facet_wrap(~Gender) +
+  labs(y = "Proportion", x = "") + 
+  theme(
+    plot.title.position = "plot",
+    axis.text.x = element_text(size = 12),
+    legend.text = element_text(size = 12)
+  )
+```
+
 #### Early Stage Diabetes Dataset
+
+Below are two plots broken up by gender constructed from the early stage diabetes dataset. From the first plot on the left, we notice that individuals with diabetes are associated with having slightly more muscle stiffness than individuals without diabetes. This is true for both males and females. In the second plot, we see that individuals who have diabetes are more likely to be experiencing polyuria (having to pee a lot) than individuals without diabetes. This association is true for both males and females. One important observation in these plots is the majority cases for women being cases of diabetes. This majority, which was explored earlier, shows up in both plots and may cause us to believe a variable is predictive overall when it really isn't and it is just a trend unique to our dataset.
+
+```{r}
+#| label: es_diab-dataset-eda
+#| layout-ncol: 2
+#| echo: false
+#| warning: false
+#| message: false
+
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = `muscle stiffness`, fill = target), position = "fill") +
+  scale_y_continuous(expand = c(0,0)) +
+  facet_wrap(~Gender) +
+  labs(title = "Muscle Stiffness vs Diabetes (by Gender)", 
+       x = "Muscle Stiffness", 
+       y = "Proportion") +
+  theme(
+    plot.title.position = "plot"
+  )
+
+
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = Polyuria, fill = target), position = "fill") +
+  scale_y_continuous(expand = c(0,0)) +
+  facet_wrap(~Gender) +
+  labs(title = "Polyuria vs Diabetes (by Gender)", x = "Polyuria", y = "Proportion") +
+  theme(
+    plot.title.position = "plot"
+  )
+```
+
+## IV. Preliminary Results
+
+To get a better sense of the problem, we fit initial models using logistic regression with LASSO penalties and calculated cross-validated metrics which are recorded in the tables below.
+
+### Cardiovascular Disease Dataset
+
+For the cardiovascular disease dataset, our preliminary model performed extremely well with respect to accuracy, sensitivity, and ROC AUC. Our next steps for this model will be testing other models such as support vector machines, k-nearest neighbors, Linear discriminant analysis, and more. Additionally, we will also be evaluation model results with respect to gender treated as binary which may serve as a tie-breaker between two effective models.
+
+| **Metric** | **Value** | **Interpretation** |
+|---------------|-------|-------------------------------------------------------------------------------|
+| **Accuracy** | 0.958 | Our preliminary model predicted roughly 96% of cases correctly as either heart disease or no heart disease. |
+|  |  |  |
+| **Sensitivity** | 0.961 | Our preliminary model predicted 96% of cases where individuals truly had heard disease correctly. |
+|  |  |  |
+| **ROC AUC** | 0.993 | ROC AUC is hard to interpret. However we would expect a value of 0.5 for random guessing and 1 as perfect so 0.99 is extremely good. |
+
+### CDC Diabetes Dataset
+
+For the CDC diabetes dataset, our preliminary model performed very poorly. We see the sensitivity with respect to diabetes diagnoses is very poor while the accuracy and ROC AUC values are somewhat good. This is due to the high prevelance of non-diabetes diagnoses in the data which dominate the predictions. Our next steps will involve testing more models to improve the sensitivity of our final model to better catch diabetes cases. We will also be evaluate these models with respect to equal outcomes for males and females to approach a final model.
+
+| **Metric** | **Value** | **Interpretation** |
+|---------------|--------|------------------------------------------------------------------------------|
+| **Accuracy** | 0.849 | Our preliminary model predicted roughly 85% of cases correctly as either diabetes or no diabetes. |
+|  |  |  |
+| **Sensitivity** | 0.186 | Our preliminary model predicted 18.6% of cases where individuals truly had diabetes correctly. |
+|  |  |  |
+| **ROC AUC** | 0.819 | ROC AUC is hard to interpret. However we would expect a value of 0.5 for random guessing so 0.819 is an improvement. |
+
+### Early Stage Diabetes Dataset
+
+For the early stage diabetes dateset, our preliminary model performed very well with respect to accuracy, sensitivity, and ROC AUC. We see the sensitivity of the preliminary model was very good which aligns with our initial project goals. Our next steps for this dataset will include testing more models and evalutating these models overall and with respect to performance for males and females.
+
+| **Metric** | **Value** | **Interpretation** |
+|---------------|-------|-------------------------------------------------------------------------------|
+| **Accuracy** | 0.856 | Our preliminary model predicted roughly 86% of cases correctly as either diabetes or no diabetes. |
+|  |  |  |
+| **Sensitivity** | 0.946 | Our preliminary model predicted 94.6% of cases where individuals truly had diabetes correctly. |
+|  |  |  |
+| **ROC AUC** | 0.955 | ROC AUC is hard to interpret. However we would expect a value of 0.5 for random guessing and 1 as perfect so 0.95 is extremely good. |
+
+## V. Project Timeline and Goals
+
+Please note: This document is the project proposal
+
+| **Date** | **Deliverable** | **Description** |
+|---------|---------------|-------------------------------------------------|
+| 11/22/24 | Project Proposal | Document describing initial project goals and discussion of initial dataset exploration model fitting results. |
+|  |  |  |
+| 12/6/24 | Final Report | Final report including discussion of final results, model use instructions, limitations of project, and next steps. |
+|  |  |  |
+| 12/6/24 | Final Models | Final predictive models |
+|  |  |  |
+| 12/6/24 | Presentation | Presentation of final results (as poster). Discussion of key findings, metrics, and limitations of project. |
