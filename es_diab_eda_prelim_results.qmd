@@ -15,6 +15,9 @@ library(tidyverse)
 library(tidymodels)
 library(rpart)
 library(rpart.plot)
+library(rsample)
+library(themis)
+library(yardstick)
 ```
 
 ```{r}
@@ -569,4 +572,276 @@ metrics %>%
 metrics %>%
     filter(.metric == "brier_class") %>%
     arrange(mean)
+```
+
+# Analysis 
+
+```{r}
+#| label: plot of gender split
+
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = "", fill = Gender), position = "fill") +
+  labs(title = "Proportion of Men and Women", 
+       x = NULL, 
+       y = "Proportion")
+
+
+
+gender_proportions <- es_diab %>%
+  count(Gender) %>%
+  mutate(Prop = n / sum(n))
+
+ggplot(gender_proportions, aes(x = "", y = Prop, fill = Gender)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Proportion of Men and Women",
+    x = NULL,
+    y = NULL
+  ) +
+  theme_void() +
+  theme(legend.position = "right")
+```
+
+```{r}
+#| label: plot of target split
+
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = "", fill = target), position = "fill") +
+  labs(title = "Proportion of Diabetes and No Diabetes", 
+       x = NULL, 
+       y = "Proportion")
+
+
+
+target_proportions <- es_diab %>%
+  count(target) %>%
+  mutate(Prop = n / sum(n))
+
+ggplot(target_proportions, aes(x = "", y = Prop, fill = target)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Proportion of Diabetes and No Diabetes",
+    x = NULL,
+    y = NULL
+  ) +
+  theme_void() +
+  theme(legend.position = "right")
+```
+
+## Decision Tree 
+
+### Regular Train/Test Split + No Upsampling
+
+```{r}
+#| label: decision tree - cross validation
+
+set.seed(8)
+data_split <- initial_split(es_diab, prop = 0.75, strata = target)
+train <- training(data_split)
+test <- testing(data_split)
+
+es_diab_cv <- vfold_cv(train, v = 10)
+
+recipe_tree <- recipe(target ~ ., 
+                   data = train) 
+
+tree_mod <- decision_tree(
+  cost_complexity = tune(),
+  tree_depth = tune()
+) %>%
+  set_mode("classification") %>%
+  set_engine("rpart")
+
+tree_wflow <- workflow() %>%
+  add_recipe(recipe_tree) %>%
+  add_model(tree_mod)
+
+tree_grid <- grid_regular(
+  cost_complexity(range = c(0.001, 0.1)),
+  tree_depth(range = c(1, 20)),
+  levels = 10
+)
+
+cv_results <- tune_grid(
+  tree_wflow,
+  resamples = es_diab_cv,
+  grid = tree_grid,
+  metrics = metric_set(roc_auc, accuracy, sensitivity)
+)
+
+metrics <- collect_metrics(cv_results)
+
+metrics %>%
+    filter(.metric == "roc_auc") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "accuracy") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "sensitivity") %>%
+    arrange(desc(mean))
+```
+
+```{r}
+#| label: decision tree - test set metrics
+
+dt_mod <- decision_tree(
+  cost_complexity = 1.002305,
+  tree_depth = 3
+) %>%
+  set_mode("classification") %>%
+  set_engine("rpart")
+
+dt_wflow <- workflow() %>%
+  add_recipe(recipe_tree) %>%
+  add_model(dt_mod)
+
+dt_fit <- dt_wflow %>%
+  fit(data = train)
+
+test_set <- test %>%
+  mutate(
+    dt_pred_prob = predict(dt_fit, new_data = test, type = "prob")$.pred_diabetes,
+    dt_pred_class = predict(dt_fit, new_data = test, type = "class")$.pred_class
+  )
+
+test_metrics <- metric_set(accuracy, roc_auc, sensitivity)
+
+metrics_result <- test_metrics(
+  data = test_set,
+  truth = target,
+  estimate = dt_pred_class,
+  dt_pred_prob  
+)
+
+metrics_result
+```
+
+```{r}
+#| label: decision tree plot (regular)
+#| 
+recipe_tree <- recipe(target ~ ., 
+                   data = es_diab) 
+
+mod_dt <- decision_tree() %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+
+wflow_dt <- workflow() %>%
+  add_recipe(recipe_tree) %>%
+  add_model(mod_dt)
+
+fit_dt <- wflow_dt %>%
+  fit(es_diab)
+
+fitted_dt <- fit_dt %>% 
+  extract_fit_parsnip()
+
+rpart.plot(fitted_dt$fit, roundint = FALSE)
+```
+
+### Stratified Test/Train Split + Upsampling
+
+```{r}
+#| label: decision tree with strat split and upsampling - cross validation
+
+es_diab <- es_diab %>%
+  mutate(strata = paste(target, Gender, sep = "_"))
+
+set.seed(8)
+data_split_s <- initial_split(es_diab, prop = 0.75, strata = strata)
+
+train_s <- training(data_split_s)
+test_s <- testing(data_split_s)
+
+train_s <- train_s %>% select(-strata)
+test_s <- test_s %>% select(-strata)
+
+es_diab_cv_s <- vfold_cv(train_s, v = 10)
+
+balanced_recipe <- recipe(target ~ ., data = train_s) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_upsample(target, over_ratio = 1)
+
+tree_mod <- decision_tree(
+  cost_complexity = tune(),
+  tree_depth = tune()
+) %>%
+  set_mode("classification") %>%
+  set_engine("rpart")
+
+tree_wflow_s <- workflow() %>%
+  add_recipe(balanced_recipe) %>%
+  add_model(tree_mod)
+
+tree_grid <- grid_regular(
+  cost_complexity(range = c(0.001, 0.1)),
+  tree_depth(range = c(1, 20)),
+  levels = 10
+)
+
+cv_results_s <- tune_grid(
+  tree_wflow_s,
+  resamples = es_diab_cv_s,
+  grid = tree_grid,
+  metrics = metric_set(roc_auc, accuracy, sensitivity)
+)
+
+metrics_s <- collect_metrics(cv_results_s)
+
+metrics_s %>%
+  filter(.metric == "roc_auc") %>%
+  arrange(desc(mean))
+
+metrics_s %>%
+  filter(.metric == "accuracy") %>%
+  arrange(desc(mean))
+
+metrics_s %>%
+  filter(.metric == "sensitivity") %>%
+  arrange(desc(mean))
+```
+
+```{r}
+#| label: decision tree with strat split and upsampling - test set metrics
+
+dt_mod <- decision_tree(
+  cost_complexity = 1.002305,
+  tree_depth = 3
+) %>%
+  set_mode("classification") %>%
+  set_engine("rpart")
+
+dt_wflow_s <- workflow() %>%
+  add_recipe(balanced_recipe) %>%
+  add_model(dt_mod)
+
+dt_fit_s <- dt_wflow_s %>%
+  fit(data = train_s)
+
+test_set_s <- test_s %>%
+  mutate(
+    dt_pred_prob = predict(dt_fit_s, new_data = test_s, type = "prob")$.pred_diabetes,
+    dt_pred_class = predict(dt_fit_s, new_data = test_s, type = "class")$.pred_class
+  )
+
+test_metrics <- metric_set(accuracy, roc_auc, sensitivity)
+
+metrics_result_s <- test_metrics(
+  data = test_set_s,
+  truth = target,
+  estimate = dt_pred_class,
+  dt_pred_prob  
+)
+
+metrics_result_s
 ```
