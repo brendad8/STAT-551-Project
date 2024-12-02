@@ -281,12 +281,14 @@ es_diab %>%
 
 ```{r}
 #| label: cross validation
+#| eval: false
 
 es_diab_cv <- vfold_cv(es_diab, v = 10)
 ```
 
 ```{r}
 #| label: recipes 
+#| eval: false
 
 recipe <- recipe(target ~ ., 
                    data = es_diab) %>%
@@ -307,6 +309,7 @@ recipe_pca <- recipe(target ~ .,
 
 ```{r}
 #| label: logistic regression 
+#| eval: false
 
 logit_mod <- logistic_reg() %>%
   set_mode("classification") %>%
@@ -329,6 +332,7 @@ collect_metrics(cv_results)
 
 ```{r}
 #| label: logistic regression with elastic net
+#| eval: false
 
 elastic_net_mod <- logistic_reg(
   penalty = tune(),
@@ -378,6 +382,7 @@ metrics %>%
 ```
 
 ```{r}
+#| eval: false
 
 elastic_net_mod <- logistic_reg(
   penalty = 1.002305,
@@ -400,6 +405,7 @@ elastic_net_wflow %>%
 
 ```{r}
 #| label: decision tree
+#| eval: false
 
 tree_mod <- decision_tree(
   cost_complexity = tune(),
@@ -450,6 +456,7 @@ metrics %>%
 
 ```{r}
 #| label: decision tree plot
+#| eval: false
 
 mod_dt <- decision_tree() %>%
   set_engine("rpart") %>%
@@ -472,6 +479,7 @@ rpart.plot(fitted_dt$fit, roundint = FALSE)
 
 ```{r}
 #| label: random forest
+#| eval: false
 
 rf_mod <- rand_forest(
   mtry = tune(),
@@ -525,6 +533,7 @@ metrics %>%
 
 ```{r}
 #| label: random forest with pca 
+#| eval: false
 
 rf_mod <- rand_forest(
   mtry = tune(),
@@ -574,7 +583,7 @@ metrics %>%
     arrange(mean)
 ```
 
-# Analysis 
+# Analysis
 
 ```{r}
 #| label: plot of gender split
@@ -634,12 +643,13 @@ ggplot(target_proportions, aes(x = "", y = Prop, fill = target)) +
   theme(legend.position = "right")
 ```
 
-## Decision Tree 
+## Decision Tree
 
 ### Regular Train/Test Split + No Upsampling
 
 ```{r}
 #| label: decision tree - cross validation
+#| eval: false
 
 set.seed(8)
 data_split <- initial_split(es_diab, prop = 0.75, strata = target)
@@ -692,6 +702,7 @@ metrics %>%
 
 ```{r}
 #| label: decision tree - test set metrics
+#| eval: false
 
 dt_mod <- decision_tree(
   cost_complexity = 1.002305,
@@ -727,7 +738,8 @@ metrics_result
 
 ```{r}
 #| label: decision tree plot (regular)
-#| 
+#| eval: false
+
 recipe_tree <- recipe(target ~ ., 
                    data = es_diab) 
 
@@ -752,6 +764,7 @@ rpart.plot(fitted_dt$fit, roundint = FALSE)
 
 ```{r}
 #| label: decision tree with strat split and upsampling - cross validation
+#| eval: false
 
 es_diab <- es_diab %>%
   mutate(strata = paste(target, Gender, sep = "_"))
@@ -768,8 +781,8 @@ test_s <- test_s %>% select(-strata)
 es_diab_cv_s <- vfold_cv(train_s, v = 10)
 
 balanced_recipe <- recipe(target ~ ., data = train_s) %>%
-  step_dummy(all_nominal_predictors()) %>%
   step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors()) %>%
   step_upsample(target, over_ratio = 1)
 
 tree_mod <- decision_tree(
@@ -813,6 +826,7 @@ metrics_s %>%
 
 ```{r}
 #| label: decision tree with strat split and upsampling - test set metrics
+#| eval: false
 
 dt_mod <- decision_tree(
   cost_complexity = 1.002305,
@@ -844,4 +858,194 @@ metrics_result_s <- test_metrics(
 )
 
 metrics_result_s
+```
+
+## Logistic Regression with LASSO 
+
+### Regular Train/Test Split + No Upsampling
+
+```{r}
+#| label: log reg with lasso - cross validation
+
+set.seed(8)
+data_split <- initial_split(es_diab, prop = 0.75, strata = target)
+train <- training(data_split)
+test <- testing(data_split)
+
+es_diab_cv <- vfold_cv(train, v = 10)
+
+recipe_train <- recipe(target ~ ., 
+                   data = train) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+
+lasso_mod <- logistic_reg(
+  penalty = tune(),
+  mixture = 1
+) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+lasso_wflow <- workflow() %>%
+  add_recipe(recipe_train) %>%
+  add_model(lasso_mod)
+
+lasso_grid <- grid_regular(
+  penalty(),
+  levels = 10
+)
+
+cv_results_lasso <- tune_grid(
+  lasso_wflow,
+  resamples = es_diab_cv,
+  grid = lasso_grid,
+  metrics = metric_set(roc_auc, accuracy, sensitivity)
+)
+
+metrics_lasso <- collect_metrics(cv_results_lasso)
+
+metrics_lasso %>%
+    filter(.metric == "roc_auc") %>%
+    arrange(desc(mean))
+
+metrics_lasso %>%
+    filter(.metric == "accuracy") %>%
+    arrange(desc(mean))
+
+metrics_lasso %>%
+    filter(.metric == "sensitivity") %>%
+    arrange(desc(mean))
+```
+
+```{r}
+#| label: log reg with lasso - test set metrics
+
+lasso_mod_final <- logistic_reg(
+  penalty = 0.0004641589,
+  mixture = 1
+) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+lasso_wflow_final <- workflow() %>%
+  add_recipe(recipe_train) %>%
+  add_model(lasso_mod_final)
+
+lasso_fit <- lasso_wflow_final %>%
+  fit(data = train)
+
+test_set <- test %>%
+  mutate(
+    pred_prob = predict(lasso_fit, new_data = test, type = "prob")$.pred_diabetes,
+    pred_class = predict(lasso_fit, new_data = test, type = "class")$.pred_class
+  )
+
+test_metrics <- metric_set(accuracy, roc_auc, sensitivity)
+
+metrics_result <- test_metrics(
+  data = test_set,
+  truth = target,
+  estimate = pred_class,
+  pred_prob  
+)
+
+metrics_result
+```
+
+### Stratified Test/Train Split + Upsampling
+
+```{r}
+#| label: log reg with lasso with strat split and upsampling - cross validation
+#| eval: false
+
+es_diab <- es_diab %>%
+  mutate(strata = paste(target, Gender, sep = "_"))
+
+set.seed(8)
+data_split_s <- initial_split(es_diab, prop = 0.75, strata = strata)
+
+train_s <- training(data_split_s)
+test_s <- testing(data_split_s)
+
+train_s <- train_s %>% select(-strata)
+test_s <- test_s %>% select(-strata)
+
+es_diab_cv_s <- vfold_cv(train_s, v = 10)
+
+balanced_recipe <- recipe(target ~ ., data = train_s) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_upsample(target, over_ratio = 1)
+
+lasso_mod <- logistic_reg(
+  penalty = tune(),
+  mixture = 1
+) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+lasso_wflow <- workflow() %>%
+  add_recipe(balanced_recipe) %>%
+  add_model(lasso_mod)
+
+lasso_grid <- grid_regular(
+  penalty(),
+  levels = 10
+)
+
+cv_results_lasso <- tune_grid(
+  lasso_wflow,
+  resamples = es_diab_cv,
+  grid = lasso_grid,
+  metrics = metric_set(roc_auc, accuracy, sensitivity)
+)
+
+metrics_lasso <- collect_metrics(cv_results_lasso)
+
+metrics_lasso %>%
+    filter(.metric == "roc_auc") %>%
+    arrange(desc(mean))
+
+metrics_lasso %>%
+    filter(.metric == "accuracy") %>%
+    arrange(desc(mean))
+
+metrics_lasso %>%
+    filter(.metric == "sensitivity") %>%
+    arrange(desc(mean))
+```
+
+```{r}
+#| label: log reg with lasso with strat split and upsampling - test set metrics
+
+lasso_mod_final <- logistic_reg(
+  penalty = 0.005994843,
+  mixture = 1
+) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+lasso_wflow_final <- workflow() %>%
+  add_recipe(balanced_recipe) %>%
+  add_model(lasso_mod_final)
+
+lasso_fit <- lasso_wflow_final %>%
+  fit(data = train)
+
+test_set <- test %>%
+  mutate(
+    pred_prob = predict(lasso_fit, new_data = test, type = "prob")$.pred_diabetes,
+    pred_class = predict(lasso_fit, new_data = test, type = "class")$.pred_class
+  )
+
+test_metrics <- metric_set(accuracy, roc_auc, sensitivity)
+
+metrics_result <- test_metrics(
+  data = test_set,
+  truth = target,
+  estimate = pred_class,
+  pred_prob  
+)
+
+metrics_result
 ```
