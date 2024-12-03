@@ -860,7 +860,7 @@ metrics_result_s <- test_metrics(
 metrics_result_s
 ```
 
-## Logistic Regression with LASSO 
+## Logistic Regression with LASSO
 
 ### Regular Train/Test Split + No Upsampling
 
@@ -950,6 +950,35 @@ metrics_result <- test_metrics(
 )
 
 metrics_result
+```
+
+```{r}
+grouped_metrics_result <- test_set %>%
+  group_by(Gender) %>%
+  summarise(
+    accuracy = accuracy_vec(truth = target, estimate = pred_class),
+    roc_auc = if (n_distinct(target) > 1) {
+      roc_auc_vec(truth = target, estimate = pred_prob)
+    } else {
+      NA_real_
+    },
+    sensitivity = sens_vec(truth = target, estimate = pred_class),
+    .groups = "drop"  
+  )
+
+grouped_metrics_result
+```
+
+```{r}
+lasso_fit %>% 
+  extract_fit_parsnip() %>% 
+  tidy() 
+
+lasso_fit %>%
+  extract_fit_parsnip() %>%
+  tidy() %>%
+  mutate(abs_estimate = abs(estimate)) %>%
+  arrange(desc(abs_estimate))
 ```
 
 ### Stratified Test/Train Split + Upsampling
@@ -1048,4 +1077,21 @@ metrics_result <- test_metrics(
 )
 
 metrics_result
+```
+
+```{r}
+grouped_metrics_result <- test_set %>%
+  group_by(Gender) %>%
+  summarise(
+    accuracy = accuracy_vec(truth = target, estimate = pred_class),
+    roc_auc = if (n_distinct(target) > 1) {
+      roc_auc_vec(truth = target, estimate = pred_prob)
+    } else {
+      NA_real_
+    },
+    sensitivity = sens_vec(truth = target, estimate = pred_class),
+    .groups = "drop"  
+  )
+
+grouped_metrics_result
 ```
