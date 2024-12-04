@@ -15,6 +15,9 @@ library(tidyverse)
 library(tidymodels)
 library(rpart)
 library(rpart.plot)
+library(rsample)
+library(themis)
+library(yardstick)
 ```
 
 ```{r}
@@ -278,12 +281,14 @@ es_diab %>%
 
 ```{r}
 #| label: cross validation
+#| eval: false
 
 es_diab_cv <- vfold_cv(es_diab, v = 10)
 ```
 
 ```{r}
 #| label: recipes 
+#| eval: false
 
 recipe <- recipe(target ~ ., 
                    data = es_diab) %>%
@@ -304,6 +309,7 @@ recipe_pca <- recipe(target ~ .,
 
 ```{r}
 #| label: logistic regression 
+#| eval: false
 
 logit_mod <- logistic_reg() %>%
   set_mode("classification") %>%
@@ -326,6 +332,7 @@ collect_metrics(cv_results)
 
 ```{r}
 #| label: logistic regression with elastic net
+#| eval: false
 
 elastic_net_mod <- logistic_reg(
   penalty = tune(),
@@ -375,6 +382,7 @@ metrics %>%
 ```
 
 ```{r}
+#| eval: false
 
 elastic_net_mod <- logistic_reg(
   penalty = 1.002305,
@@ -397,6 +405,7 @@ elastic_net_wflow %>%
 
 ```{r}
 #| label: decision tree
+#| eval: false
 
 tree_mod <- decision_tree(
   cost_complexity = tune(),
@@ -447,6 +456,7 @@ metrics %>%
 
 ```{r}
 #| label: decision tree plot
+#| eval: false
 
 mod_dt <- decision_tree() %>%
   set_engine("rpart") %>%
@@ -469,6 +479,7 @@ rpart.plot(fitted_dt$fit, roundint = FALSE)
 
 ```{r}
 #| label: random forest
+#| eval: false
 
 rf_mod <- rand_forest(
   mtry = tune(),
@@ -522,6 +533,7 @@ metrics %>%
 
 ```{r}
 #| label: random forest with pca 
+#| eval: false
 
 rf_mod <- rand_forest(
   mtry = tune(),
@@ -569,4 +581,517 @@ metrics %>%
 metrics %>%
     filter(.metric == "brier_class") %>%
     arrange(mean)
+```
+
+# Analysis
+
+```{r}
+#| label: plot of gender split
+
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = "", fill = Gender), position = "fill") +
+  labs(title = "Proportion of Men and Women", 
+       x = NULL, 
+       y = "Proportion")
+
+
+
+gender_proportions <- es_diab %>%
+  count(Gender) %>%
+  mutate(Prop = n / sum(n))
+
+ggplot(gender_proportions, aes(x = "", y = Prop, fill = Gender)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Proportion of Men and Women",
+    x = NULL,
+    y = NULL
+  ) +
+  theme_void() +
+  theme(legend.position = "right")
+```
+
+```{r}
+#| label: plot of target split
+
+es_diab %>%
+  ggplot() +
+  geom_bar(aes(x = "", fill = target), position = "fill") +
+  labs(title = "Proportion of Diabetes and No Diabetes", 
+       x = NULL, 
+       y = "Proportion")
+
+
+
+target_proportions <- es_diab %>%
+  count(target) %>%
+  mutate(Prop = n / sum(n))
+
+ggplot(target_proportions, aes(x = "", y = Prop, fill = target)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Proportion of Diabetes and No Diabetes",
+    x = NULL,
+    y = NULL
+  ) +
+  theme_void() +
+  theme(legend.position = "right")
+```
+
+## Decision Tree
+
+### Regular Train/Test Split + No Upsampling
+
+```{r}
+#| label: decision tree - cross validation
+#| eval: false
+
+set.seed(8)
+data_split <- initial_split(es_diab, prop = 0.75, strata = target)
+train <- training(data_split)
+test <- testing(data_split)
+
+es_diab_cv <- vfold_cv(train, v = 10)
+
+recipe_tree <- recipe(target ~ ., 
+                   data = train) 
+
+tree_mod <- decision_tree(
+  cost_complexity = tune(),
+  tree_depth = tune()
+) %>%
+  set_mode("classification") %>%
+  set_engine("rpart")
+
+tree_wflow <- workflow() %>%
+  add_recipe(recipe_tree) %>%
+  add_model(tree_mod)
+
+tree_grid <- grid_regular(
+  cost_complexity(range = c(0.001, 0.1)),
+  tree_depth(range = c(1, 20)),
+  levels = 10
+)
+
+cv_results <- tune_grid(
+  tree_wflow,
+  resamples = es_diab_cv,
+  grid = tree_grid,
+  metrics = metric_set(roc_auc, accuracy, sensitivity)
+)
+
+metrics <- collect_metrics(cv_results)
+
+metrics %>%
+    filter(.metric == "roc_auc") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "accuracy") %>%
+    arrange(desc(mean))
+
+metrics %>%
+    filter(.metric == "sensitivity") %>%
+    arrange(desc(mean))
+```
+
+```{r}
+#| label: decision tree - test set metrics
+#| eval: false
+
+dt_mod <- decision_tree(
+  cost_complexity = 1.002305,
+  tree_depth = 3
+) %>%
+  set_mode("classification") %>%
+  set_engine("rpart")
+
+dt_wflow <- workflow() %>%
+  add_recipe(recipe_tree) %>%
+  add_model(dt_mod)
+
+dt_fit <- dt_wflow %>%
+  fit(data = train)
+
+test_set <- test %>%
+  mutate(
+    dt_pred_prob = predict(dt_fit, new_data = test, type = "prob")$.pred_diabetes,
+    dt_pred_class = predict(dt_fit, new_data = test, type = "class")$.pred_class
+  )
+
+test_metrics <- metric_set(accuracy, roc_auc, sensitivity)
+
+metrics_result <- test_metrics(
+  data = test_set,
+  truth = target,
+  estimate = dt_pred_class,
+  dt_pred_prob  
+)
+
+metrics_result
+```
+
+```{r}
+#| label: decision tree plot (regular)
+#| eval: false
+
+recipe_tree <- recipe(target ~ ., 
+                   data = es_diab) 
+
+mod_dt <- decision_tree() %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+
+wflow_dt <- workflow() %>%
+  add_recipe(recipe_tree) %>%
+  add_model(mod_dt)
+
+fit_dt <- wflow_dt %>%
+  fit(es_diab)
+
+fitted_dt <- fit_dt %>% 
+  extract_fit_parsnip()
+
+rpart.plot(fitted_dt$fit, roundint = FALSE)
+```
+
+### Stratified Test/Train Split + Upsampling
+
+```{r}
+#| label: decision tree with strat split and upsampling - cross validation
+#| eval: false
+
+es_diab <- es_diab %>%
+  mutate(strata = paste(target, Gender, sep = "_"))
+
+set.seed(8)
+data_split_s <- initial_split(es_diab, prop = 0.75, strata = strata)
+
+train_s <- training(data_split_s)
+test_s <- testing(data_split_s)
+
+train_s <- train_s %>% select(-strata)
+test_s <- test_s %>% select(-strata)
+
+es_diab_cv_s <- vfold_cv(train_s, v = 10)
+
+balanced_recipe <- recipe(target ~ ., data = train_s) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_upsample(target, over_ratio = 1)
+
+tree_mod <- decision_tree(
+  cost_complexity = tune(),
+  tree_depth = tune()
+) %>%
+  set_mode("classification") %>%
+  set_engine("rpart")
+
+tree_wflow_s <- workflow() %>%
+  add_recipe(balanced_recipe) %>%
+  add_model(tree_mod)
+
+tree_grid <- grid_regular(
+  cost_complexity(range = c(0.001, 0.1)),
+  tree_depth(range = c(1, 20)),
+  levels = 10
+)
+
+cv_results_s <- tune_grid(
+  tree_wflow_s,
+  resamples = es_diab_cv_s,
+  grid = tree_grid,
+  metrics = metric_set(roc_auc, accuracy, sensitivity)
+)
+
+metrics_s <- collect_metrics(cv_results_s)
+
+metrics_s %>%
+  filter(.metric == "roc_auc") %>%
+  arrange(desc(mean))
+
+metrics_s %>%
+  filter(.metric == "accuracy") %>%
+  arrange(desc(mean))
+
+metrics_s %>%
+  filter(.metric == "sensitivity") %>%
+  arrange(desc(mean))
+```
+
+```{r}
+#| label: decision tree with strat split and upsampling - test set metrics
+#| eval: false
+
+dt_mod <- decision_tree(
+  cost_complexity = 1.002305,
+  tree_depth = 3
+) %>%
+  set_mode("classification") %>%
+  set_engine("rpart")
+
+dt_wflow_s <- workflow() %>%
+  add_recipe(balanced_recipe) %>%
+  add_model(dt_mod)
+
+dt_fit_s <- dt_wflow_s %>%
+  fit(data = train_s)
+
+test_set_s <- test_s %>%
+  mutate(
+    dt_pred_prob = predict(dt_fit_s, new_data = test_s, type = "prob")$.pred_diabetes,
+    dt_pred_class = predict(dt_fit_s, new_data = test_s, type = "class")$.pred_class
+  )
+
+test_metrics <- metric_set(accuracy, roc_auc, sensitivity)
+
+metrics_result_s <- test_metrics(
+  data = test_set_s,
+  truth = target,
+  estimate = dt_pred_class,
+  dt_pred_prob  
+)
+
+metrics_result_s
+```
+
+## Logistic Regression with LASSO
+
+### Regular Train/Test Split + No Upsampling
+
+```{r}
+#| label: log reg with lasso - cross validation
+
+set.seed(8)
+data_split <- initial_split(es_diab, prop = 0.75, strata = target)
+train <- training(data_split)
+test <- testing(data_split)
+
+es_diab_cv <- vfold_cv(train, v = 10)
+
+recipe_train <- recipe(target ~ ., 
+                   data = train) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+
+lasso_mod <- logistic_reg(
+  penalty = tune(),
+  mixture = 1
+) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+lasso_wflow <- workflow() %>%
+  add_recipe(recipe_train) %>%
+  add_model(lasso_mod)
+
+lasso_grid <- grid_regular(
+  penalty(),
+  levels = 10
+)
+
+cv_results_lasso <- tune_grid(
+  lasso_wflow,
+  resamples = es_diab_cv,
+  grid = lasso_grid,
+  metrics = metric_set(roc_auc, accuracy, sensitivity)
+)
+
+metrics_lasso <- collect_metrics(cv_results_lasso)
+
+metrics_lasso %>%
+    filter(.metric == "roc_auc") %>%
+    arrange(desc(mean))
+
+metrics_lasso %>%
+    filter(.metric == "accuracy") %>%
+    arrange(desc(mean))
+
+metrics_lasso %>%
+    filter(.metric == "sensitivity") %>%
+    arrange(desc(mean))
+```
+
+```{r}
+#| label: log reg with lasso - test set metrics
+
+lasso_mod_final <- logistic_reg(
+  penalty = 0.0004641589,
+  mixture = 1
+) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+lasso_wflow_final <- workflow() %>%
+  add_recipe(recipe_train) %>%
+  add_model(lasso_mod_final)
+
+lasso_fit <- lasso_wflow_final %>%
+  fit(data = train)
+
+test_set <- test %>%
+  mutate(
+    pred_prob = predict(lasso_fit, new_data = test, type = "prob")$.pred_diabetes,
+    pred_class = predict(lasso_fit, new_data = test, type = "class")$.pred_class
+  )
+
+test_metrics <- metric_set(accuracy, roc_auc, sensitivity)
+
+metrics_result <- test_metrics(
+  data = test_set,
+  truth = target,
+  estimate = pred_class,
+  pred_prob  
+)
+
+metrics_result
+```
+
+```{r}
+grouped_metrics_result <- test_set %>%
+  group_by(Gender) %>%
+  summarise(
+    accuracy = accuracy_vec(truth = target, estimate = pred_class),
+    roc_auc = if (n_distinct(target) > 1) {
+      roc_auc_vec(truth = target, estimate = pred_prob)
+    } else {
+      NA_real_
+    },
+    sensitivity = sens_vec(truth = target, estimate = pred_class),
+    .groups = "drop"  
+  )
+
+grouped_metrics_result
+```
+
+```{r}
+lasso_fit %>% 
+  extract_fit_parsnip() %>% 
+  tidy() 
+
+lasso_fit %>%
+  extract_fit_parsnip() %>%
+  tidy() %>%
+  mutate(abs_estimate = abs(estimate)) %>%
+  arrange(desc(abs_estimate))
+```
+
+### Stratified Test/Train Split + Upsampling
+
+```{r}
+#| label: log reg with lasso with strat split and upsampling - cross validation
+#| eval: false
+
+es_diab <- es_diab %>%
+  mutate(strata = paste(target, Gender, sep = "_"))
+
+set.seed(8)
+data_split_s <- initial_split(es_diab, prop = 0.75, strata = strata)
+
+train_s <- training(data_split_s)
+test_s <- testing(data_split_s)
+
+train_s <- train_s %>% select(-strata)
+test_s <- test_s %>% select(-strata)
+
+es_diab_cv_s <- vfold_cv(train_s, v = 10)
+
+balanced_recipe <- recipe(target ~ ., data = train_s) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_upsample(target, over_ratio = 1)
+
+lasso_mod <- logistic_reg(
+  penalty = tune(),
+  mixture = 1
+) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+lasso_wflow <- workflow() %>%
+  add_recipe(balanced_recipe) %>%
+  add_model(lasso_mod)
+
+lasso_grid <- grid_regular(
+  penalty(),
+  levels = 10
+)
+
+cv_results_lasso <- tune_grid(
+  lasso_wflow,
+  resamples = es_diab_cv,
+  grid = lasso_grid,
+  metrics = metric_set(roc_auc, accuracy, sensitivity)
+)
+
+metrics_lasso <- collect_metrics(cv_results_lasso)
+
+metrics_lasso %>%
+    filter(.metric == "roc_auc") %>%
+    arrange(desc(mean))
+
+metrics_lasso %>%
+    filter(.metric == "accuracy") %>%
+    arrange(desc(mean))
+
+metrics_lasso %>%
+    filter(.metric == "sensitivity") %>%
+    arrange(desc(mean))
+```
+
+```{r}
+#| label: log reg with lasso with strat split and upsampling - test set metrics
+
+lasso_mod_final <- logistic_reg(
+  penalty = 0.005994843,
+  mixture = 1
+) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+lasso_wflow_final <- workflow() %>%
+  add_recipe(balanced_recipe) %>%
+  add_model(lasso_mod_final)
+
+lasso_fit <- lasso_wflow_final %>%
+  fit(data = train)
+
+test_set <- test %>%
+  mutate(
+    pred_prob = predict(lasso_fit, new_data = test, type = "prob")$.pred_diabetes,
+    pred_class = predict(lasso_fit, new_data = test, type = "class")$.pred_class
+  )
+
+test_metrics <- metric_set(accuracy, roc_auc, sensitivity)
+
+metrics_result <- test_metrics(
+  data = test_set,
+  truth = target,
+  estimate = pred_class,
+  pred_prob  
+)
+
+metrics_result
+```
+
+```{r}
+grouped_metrics_result <- test_set %>%
+  group_by(Gender) %>%
+  summarise(
+    accuracy = accuracy_vec(truth = target, estimate = pred_class),
+    roc_auc = if (n_distinct(target) > 1) {
+      roc_auc_vec(truth = target, estimate = pred_prob)
+    } else {
+      NA_real_
+    },
+    sensitivity = sens_vec(truth = target, estimate = pred_class),
+    .groups = "drop"  
+  )
+
+grouped_metrics_result
 ```
