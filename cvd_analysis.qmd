@@ -1,6 +1,6 @@
 ---
 title: "CVD Analysis"
-author: "Jacob Perez"
+author: Jacob Perez
 format: html
 editor: visual
 code-fold: true
@@ -41,20 +41,27 @@ cvd <- cvd %>%
   mutate(target = if_else(target == 0, "no heart disease", "heart disease"),
          target = factor(target, levels = c("heart disease", "no heart disease")),
          gender = if_else(gender == 0, "female", "male"),
-         gender = as.factor(gender),
          chestpain = case_when(chestpain == 0 ~ "typical angina",
                                chestpain == 1 ~ "atypical angina",
                                chestpain == 2 ~ "non-anginal pain",
                                chestpain == 3 ~ "asymptomatic"),
-         chestpain = as.factor(chestpain),
-         fastingbloodsugar = if_else(fastingbloodsugar == 0, "false", "true"))
+         fastingbloodsugar = if_else(fastingbloodsugar == 0, "<=120", ">120"),
+         restingrelectro = case_when(restingrelectro == 0 ~ "normal",
+                                     restingrelectro == 1 ~ "having ST-T",
+                                     restingrelectro == 2 ~ "showing hypertrophy"),
+         slope = as.factor(slope))
 ```
+
+
+
 
 # Distribution of Response Variables
 
 ## Cardiovascular Disease Dataset
 
 ```{r}
+#| label: target-prop
+
 N <- nrow(cvd)
 cvd %>%
   select(target) %>%
@@ -62,6 +69,9 @@ cvd %>%
   summarize(n = n()) %>%
   mutate(prop = n / N)
 ```
+
+
+
 
 ## Cardiovascular Disease
 
@@ -110,13 +120,15 @@ cvd %>%
   facet_wrap(~gender)
 ```
 
-## Lets Explore Mixture Models
+
+
+
+# Lets Explore Mixture Models
 
 ```{r}
+#| label: cv-and-recipe
 cvd_cv <- vfold_cv(cvd, v = 5)
-```
 
-```{r}
 rec1 <- recipe(target ~ ., data = cvd) %>%
   step_rm(patientid) %>%
   step_dummy(all_nominal_predictors()) %>%
@@ -132,15 +144,16 @@ elas_net_spec <- logistic_reg(penalty = tune(),
                             mixture = tune()) %>%
   set_engine("glmnet") %>%
   set_mode("classification")
-```
 
-```{r, Mixture Model}
 wflow_elas_net <- workflow() %>%
   add_model(elas_net_spec) %>%
   add_recipe(rec1)
 ```
 
 ```{r}
+#| label: metrics-for-tuned-elastic-net
+
+
 wflow_elas_net %>%
   tune_grid(
     resamples = cvd_cv,
@@ -160,7 +173,7 @@ wflow_elas_net %>%
   arrange(desc(mean))
 ```
 
-### Model Fit 1
+## First Mixture Model Fit on Raw Data
 
 ```{r}
 model_fit1 <- logistic_reg(penalty = 0.005994843,
@@ -175,11 +188,14 @@ fit_model1 <- workflow() %>%
 ```
 
 ```{r}
+#| label: coefficients-for-mixture-model
+
+
 tidy(fit_model1) %>%
   arrange((desc(abs(estimate))))
 ```
 
-### Model Fit 2
+## Second Mixture Model Fit on Raw Data
 
 ```{r}
 model_fit2 <- logistic_reg(penalty = 0.0004641589,
@@ -198,15 +214,16 @@ tidy(fit_model2) %>%
   arrange((desc(abs(estimate))))
 ```
 
-## Logistic Model
+
+
+
+# Logistic Model Fit on Raw Data
 
 ```{r}
 logit_mod <- logistic_reg() %>%
   set_mode("classification") %>%
   set_engine("glm")
-```
 
-```{r}
 lr_wflow1 <- workflow() %>%
   add_model(logit_mod) %>%
   add_recipe(rec1)
@@ -219,9 +236,15 @@ lr_wflow1 %>%
 ```{r}
 lr_final <- lr_wflow1 %>%
   fit(cvd)
+
+tidy(lr_final) %>%
+  arrange(desc(abs(estimate)))
 ```
 
-## KNN
+
+
+
+# KNN Metrics on Raw Data
 
 ```{r}
 k_grid <- grid_regular(neighbors(),
@@ -243,7 +266,10 @@ tune_grid(knn_wflow,
   collect_metrics()
 ```
 
-## Classification Trees
+
+
+
+# Classification Tree Metrics on Raw Data
 
 ```{r}
 tree_mod <- decision_tree() %>%
@@ -272,7 +298,7 @@ tree_wflow1 %>%
   collect_metrics()
 ```
 
-### Lets Tune
+## Tuning Classification Trees for CVD
 
 ```{r}
 tree_wflow2 <- workflow() %>%
@@ -287,7 +313,7 @@ tune_grid(tree_wflow2,
   arrange(desc(mean))
 ```
 
-## Random Forests
+## Random Forest Metrics on CVD Data
 
 ```{r}
 mtry_grid <- grid_regular(mtry(c(1, 13)),
@@ -316,15 +342,20 @@ rf_wflow %>%
   arrange(desc(mean))
 ```
 
-## PCA
+
+
+
+
+# PCA Analysis on CVD Data
 
 ```{r}
+#| label: most relevant predictors for PC1
+
+
 pc <- prcomp(cvd_matrix, 
              center = TRUE, 
              scale = TRUE)
-```
 
-```{r}
 pc$rotation %>% 
   data.frame() %>%
   arrange(
@@ -339,9 +370,7 @@ new_dims_df <- pc$x %>%
   as.data.frame() %>%
   bind_cols(cvd$target) %>%
   rename(target = '...15')
-```
 
-```{r}
 new_dims_df %>%
   ggplot(mapping = aes(x = PC1, y = PC2, color = target)) +
   geom_point()
@@ -362,14 +391,14 @@ cvd_pca_km2$withinss
 ```
 
 ```{r}
+#|label: plotting-clustering-of-hd-by-PC1-and-PC2
+
+
 pca_km <- pc$x %>%
   as_tibble() %>%
   mutate(
-    cluster = factor(cvd_pca_km2$cluster)
-  )
-```
+    cluster = factor(cvd_pca_km2$cluster))
 
-```{r}
 pca_km %>%
   ggplot(mapping = aes(x = PC1, y = PC2, color = cluster)) +
   geom_point() + 
@@ -385,7 +414,35 @@ res %>%
   count(clust, hd)
 ```
 
-## Interpretability
+```{r}
+plot_validation_results <- function(recipe, dat = diab) {
+  recipe %>%
+    # Estimate any additional steps
+    prep() %>%
+    # Process the data (the validation set by default)
+    bake(new_data = cvd) %>%
+    # Create the scatterplot matrix
+    ggplot(aes(x = .panel_x, y = .panel_y, color = target, fill = target)) +
+    geom_point(alpha = 0.4, size = 0.5) +
+    geom_autodensity(alpha = .3) +
+    facet_matrix(vars(-target), layer.diag = 2) + 
+    scale_color_brewer(palette = "Dark2") + 
+    scale_fill_brewer(palette = "Dark2")
+}
+
+recipe(target~., data = cvd) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_pca(all_numeric_predictors(), num_comp = 4) %>%
+  plot_validation_results() + 
+  ggtitle("Principal Component Analysis")
+```
+
+
+
+
+
+# Fitting More Decision Trees on CVD Data
 
 ```{r}
 tree_mod3 <- decision_tree(cost_complexity = .000003162278,
@@ -393,9 +450,7 @@ tree_mod3 <- decision_tree(cost_complexity = .000003162278,
                            min_n = 21) %>%
   set_engine("rpart") %>%
   set_mode("classification")
-```
 
-```{r}
 tree_fit <- workflow() %>%
   add_model(tree_mod) %>%
   add_recipe(rec1) %>%
@@ -423,27 +478,322 @@ tree_fitted <- tree_fit2 %>%
 rpart.plot(tree_fitted$fit, roundint = FALSE)
 ```
 
-```{r}
-plot_validation_results <- function(recipe, dat = diab) {
-  recipe %>%
-    # Estimate any additional steps
-    prep() %>%
-    # Process the data (the validation set by default)
-    bake(new_data = cvd) %>%
-    # Create the scatterplot matrix
-    ggplot(aes(x = .panel_x, y = .panel_y, color = target, fill = target)) +
-    geom_point(alpha = 0.4, size = 0.5) +
-    geom_autodensity(alpha = .3) +
-    facet_matrix(vars(-target), layer.diag = 2) + 
-    scale_color_brewer(palette = "Dark2") + 
-    scale_fill_brewer(palette = "Dark2")
-}
 
-recipe(target~., data = cvd) %>%
-  step_normalize(all_numeric_predictors()) %>%
+
+
+
+# Test/train Split Analysis
+
+```{r}
+#| label: Initial train test split
+
+set.seed(7)
+cvd_split <- initial_split(cvd, prop = 0.75, strata = target)
+train <- training(cvd_split)
+test <- testing(cvd_split)
+
+train_cv <- vfold_cv(train, v = 5)
+
+rec_tree <- recipe(target ~ .,
+                   data = train) %>%
+  step_rm(patientid) %>%
   step_dummy(all_nominal_predictors()) %>%
-  step_pca(all_numeric_predictors(), num_comp = 4) %>%
-  plot_validation_results() + 
-  ggtitle("Principal Component Analysis")
+  step_normalize(all_numeric_predictors())
 ```
+
+## Mixture Model Tuning on test/train split
+
+```{r}
+net_grid <- grid_regular(penalty(),
+                         mixture(),
+                         levels = 10)
+
+elas_net_spec <- logistic_reg(penalty = tune(),
+                            mixture = tune()) %>%
+  set_engine("glmnet") %>%
+  set_mode("classification")
+
+wflow_elas_net <- workflow() %>%
+  add_model(elas_net_spec) %>%
+  add_recipe(rec_tree)
+
+net_cv_results <- tune_grid(
+  wflow_elas_net,
+  resamples = train_cv,
+  grid = net_grid,
+  metrics = metric_set(roc_auc, accuracy, sensitivity)
+)
+
+metrics <- collect_metrics(net_cv_results)
+```
+
+```{r}
+#| label: tuned-mixture-model-metrics-for-test/train
+metrics %>%
+  filter(.metric == "roc_auc") %>%
+  arrange(desc(mean))
+
+metrics %>%
+  filter(.metric == "accuracy") %>%
+  arrange(desc(mean))
+
+metrics %>%
+  filter(.metric == "sensitivity") %>%
+  arrange(desc(mean))
+```
+
+```{r}
+#| label: fit-tuned-mixture-model
+lr_mod <- logistic_reg(penalty = 0.0000000001,
+                            mixture = 0.2222222) %>%
+  set_engine("glmnet") %>%
+  set_mode("classification")
+
+lr_wflow <- workflow() %>%
+  add_recipe(rec_tree) %>%
+  add_model(lr_mod)
+
+lr_fit <- lr_wflow %>%
+  fit(data = train)
+```
+
+```{r}
+#|label: final-metrics-for-mixture-model-fit
+test_set <- test %>%
+  mutate(
+    dt_pred_prob = predict(lr_fit, new_data = test, type = "prob")$'.pred_heart disease',
+    dt_pred_class = predict(lr_fit, new_data = test, type = "class")$.pred_class
+  )
+
+test_metrics <- metric_set(accuracy, roc_auc, sensitivity)
+
+metrics_result <- test_metrics(
+  data = test_set,
+  truth = target,
+  estimate = dt_pred_class,
+  dt_pred_prob
+)
+
+metrics_result
+```
+
+```{r}
+#| label: important-coefficients-for-mixture-model
+tidy(lr_fit) %>%
+  arrange(desc(abs(estimate)))
+```
+
+## Classification Tree Tuning on test/train split
+
+```{r}
+#| label: Tune tree for train/test split
+
+tree_mod <- decision_tree(
+  cost_complexity = tune(),
+  tree_depth = tune()
+) %>%
+  set_mode("classification") %>%
+  set_engine("rpart")
+
+tree_wflow <- workflow() %>%
+  add_recipe(rec_tree) %>%
+  add_model(tree_mod)
+
+tree_grid <- grid_regular(
+  cost_complexity(),
+  tree_depth(),
+  levels = 10
+)
+
+cv_results <- tune_grid(
+  tree_wflow,
+  resamples = train_cv,
+  grid = tree_grid,
+  metrics = metric_set(roc_auc, accuracy, sensitivity)
+)
+
+metrics <- collect_metrics(cv_results)
+```
+
+```{r}
+#| label: Collect tune metrics
+
+metrics %>%
+  filter(.metric == "roc_auc") %>%
+  arrange(desc(mean))
+
+metrics %>%
+  filter(.metric == "accuracy") %>%
+  arrange(desc(mean))
+
+metrics %>%
+  filter(.metric == "sensitivity") %>%
+  arrange(desc(mean))
+```
+
+```{r}
+#| label: Final decision tree fit
+
+dt_mod <- decision_tree(
+  cost_complexity = .001,
+  tree_depth = 5
+) %>%
+  set_mode("classification") %>%
+  set_engine("rpart")
+
+dt_wflow <- workflow() %>%
+  add_recipe(rec_tree) %>%
+  add_model(dt_mod)
+
+dt_fit <- dt_wflow %>%
+  fit(data = train)
+```
+
+```{r}
+#| label: Metrics for decision tree
+
+
+test_set <- test %>%
+  mutate(
+    dt_pred_prob = predict(dt_fit, new_data = test, type = "prob")$'.pred_heart disease',
+    dt_pred_class = predict(dt_fit, new_data = test, type = "class")$.pred_class
+  )
+
+test_metrics <- metric_set(accuracy, roc_auc, sensitivity)
+
+metrics_result <- test_metrics(
+  data = test_set,
+  truth = target,
+  estimate = dt_pred_class,
+  dt_pred_prob
+)
+
+metrics_result
+```
+
+```{r}
+#| label: decision tree plot
+
+recipe_tree <- recipe(target ~ .,
+                      data = cvd) %>%
+  step_rm(patientid)
+
+wflow_dt <- workflow() %>%
+  add_recipe(recipe_tree) %>%
+  add_model(dt_mod)
+
+fit_dt <- wflow_dt %>%
+  fit(cvd)
+
+fitted_dt <- fit_dt %>%
+  extract_fit_parsnip()
+
+rpart.plot(fitted_dt$fit, roundint = FALSE)
+```
+
+```{r}
+cvd_strata <- cvd %>%
+  mutate(strata = paste(target, gender, sep = "_"))
+
+set.seed(7)
+data_split_s <- initial_split(cvd_strata, prop = 0.75, strata = strata)
+
+train_s <- training(data_split_s)
+test_s <- training(data_split_s)
+
+train_s <- train_s %>% select(-strata)
+test_s <- test_s %>% select(-strata)
+
+cvd_cv_s <- vfold_cv(train_s, v = 5)
+
+rec_strata <- recipe(target ~ ., data = train_s) %>%
+  step_rm(patientid) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+```
+
+```{r}
+tree_wflow_s <- workflow() %>%
+  add_recipe(rec_strata) %>%
+  add_model(tree_mod)
+
+cv_results_s <- tune_grid(
+  tree_wflow_s,
+  resamples = cvd_cv_s,
+  grid = tree_grid,
+  metrics = metric_set(roc_auc, accuracy, sensitivity)
+)
+
+metrics_s <- collect_metrics(cv_results_s)
+```
+
+```{r}
+metrics_s %>%
+  filter(.metric == "roc_auc") %>%
+  arrange(desc(mean))
+
+metrics_s %>%
+  filter(.metric == "accuracy") %>%
+  arrange(desc(mean))
+
+metrics_s %>%
+  filter(.metric == "sensitivity") %>%
+  arrange(desc(mean))
+```
+
+```{r}
+dt_wflow_s <- workflow() %>%
+  add_recipe(rec_strata) %>%
+  add_model(dt_mod)
+
+dt_fit_s <- dt_wflow_s %>%
+  fit(data = train_s)
+
+test_set_s <- test_s %>%
+  mutate(
+    dt_pred_prob = predict(dt_fit_s, new_data = test_s, type = "prob")$'.pred_heart disease',
+    dt_pred_class = predict(dt_fit_s, new_data = test_s, type = "class")$.pred_class
+  ) %>%
+  group_by(gender)
+
+test_metrics <- metric_set(accuracy, roc_auc, sensitivity)
+
+metrics_result_s <- test_metrics(
+  data = test_set_s,
+  truth = target,
+  estimate = dt_pred_class,
+  dt_pred_prob
+)
+```
+
+```{r}
+metrics_result_s
+```
+
+```{r}
+pc$rotation %>% 
+  data.frame() %>%
+  arrange(
+    desc(
+      abs(PC1)
+      )
+    )
+
+pc$rotation %>% 
+  data.frame() %>%
+  arrange(
+    desc(
+      abs(PC2)
+      )
+    )
+
+pc$rotation %>% 
+  data.frame() %>%
+  arrange(
+    desc(
+      abs(PC3)
+      )
+    )
+```
+
 
