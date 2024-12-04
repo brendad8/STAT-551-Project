@@ -527,15 +527,22 @@ tree_cv_res
 ```
 
 ```{r}
+predict(tree_fit, new_data = diab_test, type = "prob")
+
 test_results <- diab_test %>%
-  mutate(pred = predict(tree_fit, new_data = diab_test)$.pred_class) %>%
-  select(Sex, target, pred) 
+  mutate(pred = predict(tree_fit, new_data = diab_test)$.pred_class,
+         pred_prob = predict(tree_fit, new_data = diab_test, type = "prob")$.pred_diabetes
+) %>%
+  select(Sex, target, pred, pred_prob)
 
 test_results %>%
   accuracy(truth = target, estimate = pred)
 
 test_results %>%
   sensitivity(truth = target, estimate = pred)
+
+test_results %>%
+  roc_auc(truth = target, pred_prob)
 ```
 
 ```{r}
@@ -546,6 +553,10 @@ test_results %>%
 test_results %>%
   group_by(Sex) %>%
   sensitivity(truth = target, estimate = pred)
+
+test_results %>%
+  group_by(Sex) %>%
+  roc_auc(truth = target, pred_prob)
 ```
 
 ## Entire Dataset Results
