@@ -19,6 +19,7 @@ library(rpart)
 library(rpart.plot)
 library(baguette)
 library(tune)
+library(ggforce)
 ```
 
 ```{r}
@@ -26,6 +27,11 @@ library(tune)
 #| message: false
 
 cvd <- read_csv(here::here("data", "cvd_data.csv"))
+```
+
+```{r}
+cvd_matrix <- as.matrix(cvd) %>%
+  scale()
 ```
 
 ```{r}
@@ -42,10 +48,6 @@ cvd <- cvd %>%
                                chestpain == 3 ~ "asymptomatic"),
          chestpain = as.factor(chestpain),
          fastingbloodsugar = if_else(fastingbloodsugar == 0, "false", "true"))
-```
-
-```{r}
-cvd
 ```
 
 # Distribution of Response Variables
@@ -210,7 +212,7 @@ lr_wflow1 <- workflow() %>%
   add_recipe(rec1)
 
 lr_wflow1 %>%
-  fit_resamples(cvd_cv, metrics = metric_set(accuracy, roc_auc, sensitivity)) %>%
+  fit_resamples(cvd_cv) %>%
   collect_metrics()
 ```
 
@@ -232,7 +234,7 @@ knn_mod_tune <- nearest_neighbor(neighbors = tune()) %>%
 
 ```{r}
 knn_wflow <- workflow() %>%
-  add_recipe(rec2) %>%
+  add_recipe(rec1) %>%
   add_model(knn_mod_tune)
 
 tune_grid(knn_wflow,
@@ -251,7 +253,7 @@ tree_mod <- decision_tree() %>%
 tree_grid <- grid_regular(cost_complexity(),
                           tree_depth(),
                           min_n(),
-                          levels = 2)
+                          levels = 3)
 
 tree_mod2 <- decision_tree(cost_complexity = tune(),
                            tree_depth = tune(),
@@ -313,3 +315,135 @@ rf_wflow %>%
   group_by(.metric) %>%
   arrange(desc(mean))
 ```
+
+## PCA
+
+```{r}
+pc <- prcomp(cvd_matrix, 
+             center = TRUE, 
+             scale = TRUE)
+```
+
+```{r}
+pc$rotation %>% 
+  data.frame() %>%
+  arrange(
+    desc(
+      abs(PC1)
+      )
+    )
+```
+
+```{r}
+new_dims_df <- pc$x %>%
+  as.data.frame() %>%
+  bind_cols(cvd$target) %>%
+  rename(target = '...15')
+```
+
+```{r}
+new_dims_df %>%
+  ggplot(mapping = aes(x = PC1, y = PC2, color = target)) +
+  geom_point()
+```
+
+```{r}
+cumul_vars <- cumsum(pc$sdev^2)/sum(pc$sdev^2)
+cumul_vars
+```
+
+```{r}
+cvd_reduced <- pc$x[, 1:9]
+
+cvd_pca_km2 <- kmeans(cvd_reduced, 2)
+
+cvd_pca_km2$betweenss
+cvd_pca_km2$withinss
+```
+
+```{r}
+pca_km <- pc$x %>%
+  as_tibble() %>%
+  mutate(
+    cluster = factor(cvd_pca_km2$cluster)
+  )
+```
+
+```{r}
+pca_km %>%
+  ggplot(mapping = aes(x = PC1, y = PC2, color = cluster)) +
+  geom_point() + 
+  labs(title = "Clustering of Data by PC1 and PC2")
+```
+
+```{r}
+res <- tibble(
+  clust = pca_km$cluster, 
+  hd = cvd$target)
+
+res %>% 
+  count(clust, hd)
+```
+
+## Interpretability
+
+```{r}
+tree_mod3 <- decision_tree(cost_complexity = .000003162278,
+                           tree_depth = 8,
+                           min_n = 21) %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+```
+
+```{r}
+tree_fit <- workflow() %>%
+  add_model(tree_mod) %>%
+  add_recipe(rec1) %>%
+  fit(cvd)
+```
+
+```{r}
+tree_fitted <- tree_fit %>% 
+  extract_fit_parsnip()
+
+rpart.plot(tree_fitted$fit, roundint = FALSE)
+```
+
+```{r}
+tree_fit2 <- workflow() %>%
+  add_model(tree_mod3) %>%
+  add_recipe(rec1) %>%
+  fit(cvd)
+```
+
+```{r}
+tree_fitted <- tree_fit2 %>% 
+  extract_fit_parsnip()
+
+rpart.plot(tree_fitted$fit, roundint = FALSE)
+```
+
+```{r}
+plot_validation_results <- function(recipe, dat = diab) {
+  recipe %>%
+    # Estimate any additional steps
+    prep() %>%
+    # Process the data (the validation set by default)
+    bake(new_data = cvd) %>%
+    # Create the scatterplot matrix
+    ggplot(aes(x = .panel_x, y = .panel_y, color = target, fill = target)) +
+    geom_point(alpha = 0.4, size = 0.5) +
+    geom_autodensity(alpha = .3) +
+    facet_matrix(vars(-target), layer.diag = 2) + 
+    scale_color_brewer(palette = "Dark2") + 
+    scale_fill_brewer(palette = "Dark2")
+}
+
+recipe(target~., data = cvd) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_pca(all_numeric_predictors(), num_comp = 4) %>%
+  plot_validation_results() + 
+  ggtitle("Principal Component Analysis")
+```
+
