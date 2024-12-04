@@ -330,7 +330,7 @@ To get a better sense of the problem, we fit initial models using logistic regre
 For the cardiovascular disease dataset, our preliminary model performed extremely well with respect to accuracy, sensitivity, and ROC AUC. Our next steps for this model will be testing other models such as support vector machines, k-nearest neighbors, Linear discriminant analysis, and more. Additionally, we will also be evaluation model results with respect to gender treated as binary which may serve as a tie-breaker between two effective models.
 
 | **Metric** | **Value** | **Interpretation** |
-|---------------|-------|-------------------------------------------------------------------------------|
+|----|----|----|
 | **Accuracy** | 0.958 | Our preliminary model predicted roughly 96% of cases correctly as either heart disease or no heart disease. |
 |  |  |  |
 | **Sensitivity** | 0.961 | Our preliminary model predicted 96% of cases where individuals truly had heard disease correctly. |
@@ -342,7 +342,7 @@ For the cardiovascular disease dataset, our preliminary model performed extremel
 For the CDC diabetes dataset, our preliminary model performed very poorly. We see the sensitivity with respect to diabetes diagnoses is very poor while the accuracy and ROC AUC values are somewhat good. This is due to the high prevelance of non-diabetes diagnoses in the data which dominate the predictions. Our next steps will involve testing more models to improve the sensitivity of our final model to better catch diabetes cases. We will also be evaluate these models with respect to equal outcomes for males and females to approach a final model.
 
 | **Metric** | **Value** | **Interpretation** |
-|---------------|--------|------------------------------------------------------------------------------|
+|----|----|----|
 | **Accuracy** | 0.849 | Our preliminary model predicted roughly 85% of cases correctly as either diabetes or no diabetes. |
 |  |  |  |
 | **Sensitivity** | 0.186 | Our preliminary model predicted 18.6% of cases where individuals truly had diabetes correctly. |
@@ -354,7 +354,7 @@ For the CDC diabetes dataset, our preliminary model performed very poorly. We se
 For the early stage diabetes dateset, our preliminary model performed very well with respect to accuracy, sensitivity, and ROC AUC. We see the sensitivity of the preliminary model was very good which aligns with our initial project goals. Our next steps for this dataset will include testing more models and evalutating these models overall and with respect to performance for males and females.
 
 | **Metric** | **Value** | **Interpretation** |
-|---------------|-------|-------------------------------------------------------------------------------|
+|----|----|----|
 | **Accuracy** | 0.856 | Our preliminary model predicted roughly 86% of cases correctly as either diabetes or no diabetes. |
 |  |  |  |
 | **Sensitivity** | 0.946 | Our preliminary model predicted 94.6% of cases where individuals truly had diabetes correctly. |
@@ -366,7 +366,7 @@ For the early stage diabetes dateset, our preliminary model performed very well 
 Please note: This document is the project proposal
 
 | **Date** | **Deliverable** | **Description** |
-|---------|---------------|-------------------------------------------------|
+|----|----|----|
 | 11/22/24 | Project Proposal | Document describing initial project goals, discussion of initial dataset exploration, and preliminary model fitting results. |
 |  |  |  |
 | 12/6/24 | Final Report | Final report including discussion of final results, model use instructions, limitations of project, and next steps. |

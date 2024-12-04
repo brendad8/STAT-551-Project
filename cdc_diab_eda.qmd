@@ -13,6 +13,7 @@ editor: visual
 #| label: load-packages
 #| message: false
 
+library(ggforce)
 library(tidyverse)
 library(tidymodels)
 library(rpart)
@@ -155,7 +156,36 @@ diab %>%
   facet_wrap(~Stroke + Sex)
 ```
 
+Looks like PCA doesn't help
+
+```{r}
+plot_validation_results <- function(recipe, dat = diab) {
+  recipe %>%
+    # Estimate any additional steps
+    prep() %>%
+    # Process the data (the validation set by default)
+    bake(new_data = dat) %>%
+    # Create the scatterplot matrix
+    ggplot(aes(x = .panel_x, y = .panel_y, color = target, fill = target)) +
+    geom_point(alpha = 0.4, size = 0.5) +
+    geom_autodensity(alpha = .3) +
+    facet_matrix(vars(-target), layer.diag = 2) + 
+    scale_color_brewer(palette = "Dark2") + 
+    scale_fill_brewer(palette = "Dark2")
+}
+
+recipe(target~., data = diab) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_pca(all_numeric_predictors(), num_comp = 4) %>%
+  plot_validation_results() + 
+  ggtitle("Principal Component Analysis")
+
+```
+
 ## Model Fitting
+
+### Setup
 
 ```{r}
 #| label: model-fitting-setup
@@ -168,8 +198,11 @@ diab_cvs = vfold_cv(diab, v = 5)
 
 rec_full <- recipe(target~., data = diab) %>%
   step_normalize(all_numeric_predictors()) %>%
-  step_dummy(all_nominal_predictors())
+  step_dummy(all_nominal_predictors()) %>%
+  step_upsample(target)
 ```
+
+### LASSO
 
 ```{r}
 #| label: fit-lasso
@@ -187,7 +220,8 @@ lasso_wflow_tune <- workflow() %>%
 cv_results <- tune_grid(
   lasso_wflow_tune,
   resamples = diab_cvs,
-  grid = pen_grid
+  grid = pen_grid,
+  metrics = metric_set(accuracy, roc_auc, sensitivity)
 )
 ```
 
@@ -201,6 +235,11 @@ cv_results %>%
   collect_metrics() %>%
   filter(.metric == "roc_auc") %>%
   arrange(desc(mean))
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "sensitivity") %>%
+  arrange(desc(mean))
 ```
 
 ```{r}
@@ -212,17 +251,35 @@ lasso_wflow <- workflow() %>%
   add_model(lasso_spec) %>%
   add_recipe(rec_full)
 
-lasso_fit <- lasso_wflow %>% fit(diab)
+lasso_fit <- lasso_wflow %>% 
+  fit(diab)
 
 tidy(lasso_fit) %>%
   arrange(desc(estimate))
 ```
 
 ```{r}
-lasso_cv <- lasso_wflow %>% fit_resamples(diab_cvs, metrics = metric_set(roc_auc, accuracy, sensitivity)) 
+ctrl <- control_resamples(save_pred = TRUE)
+
+lasso_cv <- lasso_wflow %>% 
+  fit_resamples(diab_cvs, 
+                metrics = metric_set(roc_auc, accuracy, sensitivity),
+                control = ctrl) 
+```
+
+```{r}
+cv_preds <- data.frame()
+for(i in 1:length(lasso_cv$.predictions)) {
+  cv_preds <- 
+}
+#lasso_cv$.predictions
 ```
 
 ```{r}
 lasso_cv %>%
   collect_metrics()
+```
+
+```{r}
+lasso_cv$splits
 ```

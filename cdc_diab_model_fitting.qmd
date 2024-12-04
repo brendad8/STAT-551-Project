@@ -1,0 +1,632 @@
+---
+title: "CDC Diabetes Model Fitting"
+author: "Brendan Callender"
+format: html
+editor: visual
+---
+
+## Setup
+
+### Load Packages
+
+```{r}
+#| label: load-packages
+#| message: false
+
+library(ggforce)
+library(tidyverse)
+library(tidymodels)
+library(rpart)
+library(rpart.plot)
+library(glmnet)
+```
+
+### Read Data
+
+```{r}
+#| label: read-in-data-and-change-labels
+#| message: false
+
+diab <- read_csv(here::here("data", "diabetes_balanced_binary.csv"))
+
+diab <- diab %>%
+  mutate(
+    target = case_when(
+      Diabetes_binary == 0 ~ "no diabetes",
+      Diabetes_binary == 1 ~ "diabetes"
+  ),
+    target = factor(target, levels = c("diabetes", "no diabetes"))
+  ) %>%
+  select(-Diabetes_binary)
+
+diab <- diab %>%
+  mutate(
+    HighBP = if_else(HighBP == 0, "No", "Yes"),
+    HighChol = if_else(HighChol == 0, "No", "Yes"),
+    CholCheck = if_else(CholCheck == 0, "No", "Yes"),
+    Smoke_100_cigs = if_else(Smoker == 0, "No", "Yes"),
+    Stroke = if_else(Stroke == 0, "No", "Yes"),
+    HeartDiseaseorAttack = if_else(HeartDiseaseorAttack == 0, "No", "Yes"),
+    Phys_Act_in_p_30_days = if_else(PhysActivity == 0, "No", "Yes"),
+    Fruit_daily = if_else(Fruits == 0, "No", "Yes"),
+    Veg_daily = if_else(Veggies == 0, "No", "Yes"),
+    # men having > 14 drinks per week and adult women having > 7 drinks per week
+    HvyAlcoholConsump = if_else(HvyAlcoholConsump == 0, "No", "Yes"),
+    AnyHealthcare = if_else(AnyHealthcare == 0, "No", "Yes"),
+    NoDocbcCost = if_else(NoDocbcCost == 0, "No", "Yes"),
+    Health_Rating = case_when(GenHlth == 1 ~ "Excellent",
+                              GenHlth == 2 ~ "Very Good",
+                              GenHlth == 3 ~ "Good",
+                              GenHlth == 4 ~ "Fair",
+                              GenHlth == 5 ~ "Poor"),
+    DiffWalk = if_else(DiffWalk == 0, "No", "Yes"),
+    Sex = if_else(Sex == 0, "Female", "Male"),
+    Age = case_when(Age == 1 ~ "18-24",
+                    Age == 2 ~ "25-29",
+                    Age == 3 ~ "30-34",
+                    Age == 4 ~ "35-39",
+                    Age == 5 ~ "40-44",
+                    Age == 6 ~ "45-49",
+                    Age == 7 ~ "50-54",
+                    Age == 8 ~ "55-59",
+                    Age == 9 ~ "60-64",
+                    Age == 10 ~ "65-69",
+                    Age == 11 ~ "70-74",
+                    Age == 12 ~ "75-79",
+                    Age == 13 ~ "80+"
+                  ),
+    Education = case_when(Education == 1 ~ "None",
+                          Education == 2 ~ "Elementary",
+                          Education == 3 ~ "Some High School",
+                          Education == 4 ~ "High School Grad",
+                          Education == 5 ~ "Some College",
+                          Education == 6 ~ "College Grad"
+                          )) %>%
+  select(-Smoker, -PhysActivity, -Fruits, -Veggies, -GenHlth)
+```
+
+### Create Train/Test Split
+
+```{r}
+
+train_test_split <- initial_split(diab, prop = 3/4)
+diab_train <- training(train_test_split)
+diab_test <- testing(train_test_split)
+```
+
+### Create CV Splits
+
+```{r}
+diab_cvs <- vfold_cv(diab_train, v = 5)
+```
+
+```{r}
+diab_train %>%
+  group_by(Sex, target) %>%
+  summarize(n = n()/nrow(diab_train))
+```
+
+### PCA
+
+```{r}
+#| label: fit-pca-to-diab-train
+
+data_proc_rec <- recipe(target~., data = diab_train) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  prep()
+#   step_pca(all_predictors(), num_comp = 22) %>%
+#   prep()
+
+diab_train_proc <- data_proc_rec %>%
+  bake(new_data = diab_train)
+
+
+pc <- prcomp(diab_train_proc %>% select(-target)) 
+```
+
+```{r}
+#| label: pc-var-explained
+
+cumul_vars <- cumsum(pc$sdev^2)/sum(pc$sdev^2)
+sum(cumul_vars < 0.90) + 1
+sum(cumul_vars < 0.80) + 1
+sum(cumul_vars < 0.70) + 1
+
+```
+
+### PCA Visualization
+
+```{r}
+plot_validation_results <- function(recipe, dat = diab_train) {
+  recipe %>%
+    # Estimate any additional steps
+    prep() %>%
+    # Process the data (the validation set by default)
+    bake(new_data = dat) %>%
+    # Create the scatterplot matrix
+    ggplot(aes(x = .panel_x, y = .panel_y, color = target, fill = target)) +
+    geom_point(alpha = 0.4, size = 0.5) +
+    geom_autodensity(alpha = .3) +
+    facet_matrix(vars(-target), layer.diag = 2) + 
+    scale_color_brewer(palette = "Dark2") + 
+    scale_fill_brewer(palette = "Dark2")
+}
+
+recipe(target~., data = diab_train) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_pca(all_numeric_predictors(), num_comp = 4) %>%
+  plot_validation_results() + 
+  ggtitle("Principal Component Analysis")
+
+```
+
+### Create Recipes
+
+```{r}
+rec_full <- recipe(target~., data = diab_train) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors()) 
+
+rec_full_no_proc1 <- recipe(target~., data = diab_train) %>%
+  step_dummy(all_nominal_predictors()) 
+
+rec_full_no_proc2 <- recipe(target~., data = diab_train)
+
+rec_pca_70 <- recipe(target~., data = diab_train) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_pca(num_comp = 10)
+
+rec_pca_80 <- recipe(target~., data = diab_train) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_pca(num_comp = 14)
+
+```
+
+## Model Fitting
+
+### Lasso
+
+```{r}
+#| label: tune-lasso
+
+pen_grid <- grid_regular(penalty(), levels = 10)
+
+lasso_spec_tune <- logistic_reg(mixture = 1, penalty = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+lasso_wflow_tune <- workflow() %>%
+  add_model(lasso_spec_tune) %>%
+  add_recipe(rec_full)
+
+cv_results <- tune_grid(
+  lasso_wflow_tune,
+  resamples = diab_cvs,
+  grid = pen_grid,
+  metrics = metric_set(accuracy, roc_auc, sensitivity)
+)
+```
+
+```{r}
+#| label: lasso-cv-results
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "accuracy") %>%
+  arrange(desc(mean))
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "roc_auc") %>%
+  arrange(desc(mean))
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "sensitivity") %>%
+  arrange(desc(mean))
+```
+
+```{r}
+#| label: fit-lasso
+
+lasso_spec <- logistic_reg(mixture = 1, penalty = 1e-10) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+lasso_wflow <- workflow() %>%
+  add_model(lasso_spec) %>%
+  add_recipe(rec_full)
+
+lasso_fit <- lasso_wflow %>% 
+  fit(diab)
+
+tidy(lasso_fit) %>%
+  arrange(desc(estimate))
+```
+
+### Mixture Model
+
+```{r}
+#| label: tune-mixture
+
+pen_mix_grid <- grid_regular(penalty(), mixture(), levels = 5)
+
+mix_spec_tune <- logistic_reg(mixture = tune(), penalty = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+mix_wflow_tune <- workflow() %>%
+  add_model(mix_spec_tune) %>%
+  add_recipe(rec_full)
+
+cv_results <- tune_grid(
+  mix_wflow_tune,
+  resamples = diab_cvs,
+  grid = pen_mix_grid,
+  metrics = metric_set(accuracy, roc_auc, sensitivity)
+)
+```
+
+```{r}
+#| label: mixture-cv-results
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "accuracy") %>%
+  arrange(desc(mean))
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "roc_auc") %>%
+  arrange(desc(mean))
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "sensitivity") %>%
+  arrange(desc(mean))
+```
+
+### Decision Tree
+
+```{r}
+#| label: tune-tree
+
+cc_grid <- grid_regular(cost_complexity(), levels = 10)
+
+tree_spec_tune <- decision_tree(cost_complexity = tune()) %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+
+tree_wflow_tune <- workflow() %>%
+  add_model(tree_spec_tune) %>%
+  add_recipe(rec_full)
+
+cv_results <- tune_grid(
+    tree_wflow_tune,
+    resamples = diab_cvs,
+    grid = cc_grid,
+    metrics = metric_set(accuracy, roc_auc, sensitivity)
+  )
+
+```
+
+```{r}
+#| label: decision-tree-cv-results
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "accuracy") %>%
+  arrange(desc(mean))
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "roc_auc") %>%
+  arrange(desc(mean))
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "sensitivity") %>%
+  arrange(desc(mean))
+```
+
+```{r}
+#| label: fit-decision-tree-1
+
+tree_spec <- decision_tree(cost_complexity = 1e-02) %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+
+tree_wflow <- workflow() %>%
+  add_model(tree_spec) %>%
+  add_recipe(rec_full)
+
+tree_fit <- tree_wflow %>% fit(diab_train)
+
+tree_fit %>% 
+  extract_fit_parsnip() %>% 
+  .$fit %>%
+  rpart.plot(roundint = FALSE)
+```
+
+```{r}
+#| label: fit-decision-tree-2
+
+tree_spec <- decision_tree(cost_complexity = 5e-03) %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+
+tree_wflow <- workflow() %>%
+  add_model(tree_spec) %>%
+  add_recipe(rec_full)
+
+tree_fit <- tree_wflow %>% fit(diab_train)
+
+tree_fit %>% 
+  extract_fit_parsnip() %>% 
+  .$fit %>%
+  rpart.plot(roundint = FALSE)
+```
+
+### Random Forest
+
+```{r}
+#| label: tune-random-forest
+
+rf_grid <- grid_regular(mtry(c(3, 13)), trees(c(50, 200)), levels = 5)
+
+rf_spec_tune <- rand_forest(mtry = tune(), trees = tune()) %>%
+  set_engine("ranger") %>%
+  set_mode("classification")
+
+rf_wflow_tune <- workflow() %>%
+  add_model(rf_spec_tune) %>%
+  add_recipe(rec_full)
+
+cv_results <- tune_grid(
+    rf_wflow_tune,
+    resamples = diab_cvs,
+    grid = rf_grid,
+    metrics = metric_set(accuracy, roc_auc, sensitivity)
+  )
+```
+
+```{r}
+#| label: random-forest-cv-results
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "accuracy") %>%
+  arrange(desc(mean))
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "roc_auc") %>%
+  arrange(desc(mean))
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "sensitivity") %>%
+  arrange(desc(mean))
+```
+
+### Mixture Model + PCA
+
+```{r}
+#| label: tune-mixture_pca
+
+pen_mix_grid <- grid_regular(penalty(), mixture(), levels = 5)
+
+mix_pca_spec_tune <- logistic_reg(mixture = tune(), penalty = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+mix_pca_wflow_tune <- workflow() %>%
+  add_model(mix_pca_spec_tune) %>%
+  add_recipe(rec_pca_80)
+
+cv_results <- tune_grid(
+  mix_pca_wflow_tune,
+  resamples = diab_cvs,
+  grid = pen_mix_grid,
+  metrics = metric_set(accuracy, roc_auc, sensitivity)
+)
+```
+
+```{r}
+#| label: mixture_pca-cv-results
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "accuracy") %>%
+  arrange(desc(mean))
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "roc_auc") %>%
+  arrange(desc(mean))
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "sensitivity") %>%
+  arrange(desc(mean))
+```
+
+## Evaluating Final Models
+
+```{r}
+#| label: tune-tree
+
+cc_grid <- grid_regular(cost_complexity(c(-3,-1)), levels = 10)
+
+tree_spec_tune <- decision_tree(cost_complexity = tune()) %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+
+tree_wflow_tune <- workflow() %>%
+  add_model(tree_spec_tune) %>%
+  add_recipe(rec_full)
+
+cv_results <- tune_grid(
+    tree_wflow_tune,
+    resamples = diab_cvs,
+    grid = cc_grid,
+    metrics = metric_set(accuracy, roc_auc, sensitivity)
+  )
+
+```
+
+```{r}
+#| label: decision-tree-cv-results
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "accuracy") %>%
+  arrange(desc(mean))
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "roc_auc") %>%
+  arrange(desc(mean))
+
+cv_results %>% 
+  collect_metrics() %>%
+  filter(.metric == "sensitivity") %>%
+  arrange(desc(mean))
+```
+
+```{r}
+#| label: fit-decision-tree-3
+
+tree_spec <- decision_tree(cost_complexity = 0.01) %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+
+tree_wflow <- workflow() %>%
+  add_model(tree_spec) %>%
+  add_recipe(rec_full_no_proc1)
+
+tree_fit <- tree_wflow %>% fit(diab_train)
+
+tree_fit %>% 
+  extract_fit_parsnip() %>% 
+  .$fit %>%
+  rpart.plot(roundint = FALSE)
+```
+
+```{r}
+tree_cv <- tree_wflow %>% fit_resamples(diab_cvs, metrics = metric_set(accuracy, roc_auc, sensitivity))
+tree_cv_res <- tree_cv %>% collect_metrics()
+```
+
+```{r}
+tree_cv_res
+```
+
+```{r}
+test_results <- diab_test %>%
+  mutate(pred = predict(tree_fit, new_data = diab_test)$.pred_class) %>%
+  select(Sex, target, pred) 
+
+test_results %>%
+  accuracy(truth = target, estimate = pred)
+
+test_results %>%
+  sensitivity(truth = target, estimate = pred)
+```
+
+```{r}
+test_results %>%
+  group_by(Sex) %>%
+  accuracy(truth = target, estimate = pred)
+
+test_results %>%
+  group_by(Sex) %>%
+  sensitivity(truth = target, estimate = pred)
+```
+
+## Entire Dataset Results
+
+```{r}
+diab_full <- read_csv(here::here("data", "diabetes_full_binary.csv"))
+
+diab_full <- diab_full %>%
+  mutate(
+    target = case_when(
+      Diabetes_binary == 0 ~ "no diabetes",
+      Diabetes_binary == 1 ~ "diabetes"
+  ),
+    target = factor(target, levels = c("diabetes", "no diabetes"))
+  ) %>%
+  select(-Diabetes_binary)
+
+diab_full <- diab_full %>%
+  mutate(
+    HighBP = if_else(HighBP == 0, "No", "Yes"),
+    HighChol = if_else(HighChol == 0, "No", "Yes"),
+    CholCheck = if_else(CholCheck == 0, "No", "Yes"),
+    Smoke_100_cigs = if_else(Smoker == 0, "No", "Yes"),
+    Stroke = if_else(Stroke == 0, "No", "Yes"),
+    HeartDiseaseorAttack = if_else(HeartDiseaseorAttack == 0, "No", "Yes"),
+    Phys_Act_in_p_30_days = if_else(PhysActivity == 0, "No", "Yes"),
+    Fruit_daily = if_else(Fruits == 0, "No", "Yes"),
+    Veg_daily = if_else(Veggies == 0, "No", "Yes"),
+    # men having > 14 drinks per week and adult women having > 7 drinks per week
+    HvyAlcoholConsump = if_else(HvyAlcoholConsump == 0, "No", "Yes"),
+    AnyHealthcare = if_else(AnyHealthcare == 0, "No", "Yes"),
+    NoDocbcCost = if_else(NoDocbcCost == 0, "No", "Yes"),
+    Health_Rating = case_when(GenHlth == 1 ~ "Excellent",
+                              GenHlth == 2 ~ "Very Good",
+                              GenHlth == 3 ~ "Good",
+                              GenHlth == 4 ~ "Fair",
+                              GenHlth == 5 ~ "Poor"),
+    DiffWalk = if_else(DiffWalk == 0, "No", "Yes"),
+    Sex = if_else(Sex == 0, "Female", "Male"),
+    Age = case_when(Age == 1 ~ "18-24",
+                    Age == 2 ~ "25-29",
+                    Age == 3 ~ "30-34",
+                    Age == 4 ~ "35-39",
+                    Age == 5 ~ "40-44",
+                    Age == 6 ~ "45-49",
+                    Age == 7 ~ "50-54",
+                    Age == 8 ~ "55-59",
+                    Age == 9 ~ "60-64",
+                    Age == 10 ~ "65-69",
+                    Age == 11 ~ "70-74",
+                    Age == 12 ~ "75-79",
+                    Age == 13 ~ "80+"
+                  ),
+    Education = case_when(Education == 1 ~ "None",
+                          Education == 2 ~ "Elementary",
+                          Education == 3 ~ "Some High School",
+                          Education == 4 ~ "High School Grad",
+                          Education == 5 ~ "Some College",
+                          Education == 6 ~ "College Grad"
+                          )) %>%
+  select(-Smoker, -PhysActivity, -Fruits, -Veggies, -GenHlth)
+```
+
+```{r}
+test_results_full <- diab_full %>%
+  mutate(pred = predict(tree_fit, new_data = diab_full)$.pred_class) %>%
+  select(Sex, target, pred) 
+
+test_results_full %>%
+  accuracy(truth = target, estimate = pred)
+
+test_results_full %>%
+  sensitivity(truth = target, estimate = pred)
+```
+
+```{r}
+test_results_full %>%
+  group_by(Sex) %>%
+  accuracy(truth = target, estimate = pred)
+
+test_results_full %>%
+  group_by(Sex) %>%
+  sensitivity(truth = target, estimate = pred)
+```

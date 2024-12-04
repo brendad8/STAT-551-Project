@@ -5,7 +5,7 @@ format: pdf
 editor: visual
 ---
 
-## **Goals** 
+## **Goals**
 
 **What is the main takeaway message you hope to be able to supply to the partner?**
 
@@ -19,7 +19,7 @@ Key visualizations will include ROC-AUC curves to demonstrate model performance,
 
 We would be excited to identify specific predictors that strongly influence risk for both diabetes and cardiovascular diseases, particularly if they are actionable or previously overlooked factors. It would also be exciting if our model achieves high sensitivity and ROC-AUC across diverse patient demographics. Additionally, we are aware that symptoms of heart disease can differ significantly between men and women, with symptoms experienced by women often being overlooked or misinterpreted. We hope our findings can bring awareness to these disparities and highlight any gender-specific risk factors that could improve diagnostic accuracy for women. On the other hand, it might be disappointing if the model fails to improve prediction accuracy over existing tools or if certain predictors show significant bias or unequal outcomes across genders. \
 
-## **Challenges** 
+## **Challenges**
 
 **Are there any aspects of the data that you are worried about, or that are challenging to clean / manipulate?**
 
